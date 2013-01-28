@@ -6,17 +6,19 @@ function gcd(a,b) {
 suite {
   a = symbolic();
   b = symbolic();
-  assume(a < 200);
-  assume(b < 200);
+  assume(a < 5);
+  assume(b < 5);
+  assume(a > 0);
+  assume(b > 0);
   r = gcd(a,b);
   test {
-    assert(a % r == 0);
-    assert(b % r == 0);
+    check(a % r == 0);
+    check(b % r == 0);
   }
   test {
     c = symbolic();
     assume(a % c == 0);
     assume(b % c == 0);
-    assert(c <= r);
+    check(c <= r);
   }
 }

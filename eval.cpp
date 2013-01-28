@@ -5,7 +5,7 @@
 #define BV_WIDTH 8
 
 static std::unordered_set<std::string> builtins =
-  { "assert", "assume", "symbolic" };
+  { "assert", "assume", "symbolic", "check" };
 
 Status Runner::checkStatus(CVC3::Expr e)
 {
@@ -54,6 +54,13 @@ CVC3::Expr State::fun_assume(CVC3::Expr e)
 }
 
 CVC3::Expr State::fun_assert(CVC3::Expr e)
+{
+  fun_check(e);
+  fun_assume(e);
+  return e;
+}
+
+CVC3::Expr State::fun_check(CVC3::Expr e)
 {
   CVC3::QueryResult stat = owner->solver->query(e);
   std::vector<std::string> reasons;

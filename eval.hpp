@@ -29,6 +29,7 @@ struct State {
   CVC3::Expr fun_symbolic();
   CVC3::Expr fun_assume(CVC3::Expr e);
   CVC3::Expr fun_assert(CVC3::Expr e);
+  CVC3::Expr fun_check(CVC3::Expr e);
   Activation &curframe() { return callstack.back(); }
 
   State(Runner *owner_)
