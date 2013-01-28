@@ -167,6 +167,12 @@ CVC3::Expr State::evaluate(Expr *e)
       }
       return fun_assert(evaluate(ce->args->at(0)));
     }
+    else if (target_name == "check") {
+      if (ce->args->size() != 1) {
+	throw std::runtime_error("Wrong number of arguments to builtin function assume, expected 1 got " + std::to_string(ce->args->size()));
+      }
+      return fun_check(evaluate(ce->args->at(0)));
+    }
     Function *fun = owner->func_byname[*ce->target];
     if (fun == NULL) {
       throw std::runtime_error("Undefined function " + *ce->target);
