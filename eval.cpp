@@ -2,6 +2,8 @@
 
 #include <stdexcept>
 
+#define BV_WIDTH 8
+
 static std::unordered_set<std::string> builtins =
   { "assert", "assume", "symbolic" };
 
@@ -42,7 +44,7 @@ CVC3::Expr State::evaluate(std::vector<Expr*> &exprs)
 CVC3::Expr State::fun_symbolic()
 {
   static int id = 0;
-  return owner->solver->varExpr("var_" + std::to_string(++id), owner->solver->bitvecType(32));
+  return owner->solver->varExpr("var_" + std::to_string(++id), owner->solver->bitvecType(BV_WIDTH));
 }
 
 CVC3::Expr State::fun_assume(CVC3::Expr e)
@@ -193,11 +195,11 @@ CVC3::Expr State::evaluate(Expr *e)
       }
     switch (be->op) {
     case BasicExpr::Plus:
-      return owner->solver->newBVPlusExpr(32, child_vals[0], child_vals[1]);
+      return owner->solver->newBVPlusExpr(BV_WIDTH, child_vals[0], child_vals[1]);
     case BasicExpr::Minus:
       return owner->solver->newBVSubExpr(child_vals[0], child_vals[1]);
     case BasicExpr::Times:
-      return owner->solver->newBVMultExpr(32, child_vals[0], child_vals[1]);
+      return owner->solver->newBVMultExpr(BV_WIDTH, child_vals[0], child_vals[1]);
     case BasicExpr::Divide:
       return owner->solver->newBVSDivExpr(child_vals[0], child_vals[1]);
     case BasicExpr::Mod:
@@ -217,7 +219,7 @@ CVC3::Expr State::evaluate(Expr *e)
     }
   }
   else if (ConstExpr *ce = dynamic_cast<ConstExpr*>(e)) {
-    return owner->solver->newBVConstExpr(CVC3::Rational(std::stol(*ce->cv)), 32);
+    return owner->solver->newBVConstExpr(CVC3::Rational(std::stol(*ce->cv)), BV_WIDTH);
   }
   else if (VarExpr *ve = dynamic_cast<VarExpr*>(e)) {
     auto it = env.find(*ve->var);
