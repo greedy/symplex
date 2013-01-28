@@ -97,10 +97,9 @@ CVC3::Expr State::fun_assert(CVC3::Expr e)
 
 CVC3::Expr State::evaluate(Expr *e)
 {
-  std::unordered_map<std::string, CVC3::Expr> &env = callstack.back().env;
   if (AssignExpr *ae = dynamic_cast<AssignExpr*>(e)) {
     CVC3::Expr result = evaluate(ae->expr);
-    env.insert(std::make_pair(*ae->name, result));
+    curframe().env[*ae->name] = result;
     return result;
   }
   else if (IfThenElseExpr *ite = dynamic_cast<IfThenElseExpr*>(e)) {
@@ -121,17 +120,16 @@ CVC3::Expr State::evaluate(Expr *e)
 	CVC3::Expr false_ans = falsebranch.evaluate(ite->iffalse);
 	owner->solver->popto(stacklevel);
 	/* now merge the environments */
-	env.clear();
+	curframe().env.clear();
 	std::unordered_map<std::string, CVC3::Expr> &true_env = truebranch.curframe().env;
 	std::unordered_map<std::string, CVC3::Expr> &false_env = falsebranch.curframe().env;
 	for (auto it = true_env.begin(), ie = true_env.end();
 	     it != ie; ++it)
 	  {
 	    if (false_env.count(it->first)) {
-	      env.insert(std::make_pair(it->first,
-					owner->solver->iteExpr(cond_result,
-							      it->second,
-							      false_env[it->first])));
+              curframe().env[it->first] = owner->solver->iteExpr(cond_result,
+                                                      it->second,
+                                                      false_env.at(it->first));
 	    }
 	  }
 	return owner->solver->iteExpr(cond_result, true_ans, false_ans);
@@ -174,13 +172,14 @@ CVC3::Expr State::evaluate(Expr *e)
       {
 	arg_vals.push_back(evaluate(*it));
       }
-    callstack.emplace_back(this, target_name);
+    Activation act(this, target_name);
     auto ai = arg_vals.begin();
     for (auto pi = fun->params->begin(), pe = fun->params->end();
 	 pi != pe; ++pi, ++ai)
       {
-	callstack.back().env.insert(std::make_pair(**pi, *ai));
+	act.env[**pi] = *ai;
       }
+    callstack.push_back(act);
     CVC3::Expr result = evaluate(fun->body);
     callstack.pop_back();
     return result;
@@ -222,8 +221,8 @@ CVC3::Expr State::evaluate(Expr *e)
     return owner->solver->newBVConstExpr(CVC3::Rational(std::stol(*ce->cv)), BV_WIDTH);
   }
   else if (VarExpr *ve = dynamic_cast<VarExpr*>(e)) {
-    auto it = env.find(*ve->var);
-    if (it == env.end()) {
+    auto it = curframe().env.find(*ve->var);
+    if (it == curframe().env.end()) {
       throw std::runtime_error("Reference to undefined variable '" + *ve->var + "'");
     } else {
       return it->second;
