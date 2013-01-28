@@ -6,7 +6,7 @@ main: main.o grammar.o lex.o parser.o ast.o eval.o
 clean:
 	rm *.o main grammar.cpp lex.cpp
 
-include *.d
+-include *.d
 
 %.cpp: %.rl
 	ragel -C -G2 -o $@ $<
