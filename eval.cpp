@@ -111,21 +111,23 @@ CVC3::Expr State::evaluate(Expr *e)
   }
   else if (IfThenElseExpr *ite = dynamic_cast<IfThenElseExpr*>(e)) {
     CVC3::Expr cond_result = evaluate(ite->cond);
-    switch (owner->checkStatus(cond_result)) {
+    Status result = owner->checkStatus(cond_result);
+    switch (result) {
     case MUST_BE_TRUE:
       return evaluate(*ite->iftrue);
     case MUST_BE_FALSE:
       return evaluate(*ite->iffalse);
     case TRUE_OR_FALSE:
       {
-	int stacklevel = owner->solver->stackLevel();
 	State truebranch(*this), falsebranch(*this);
+	owner->solver->push();
 	owner->solver->assertFormula(cond_result);
 	CVC3::Expr true_ans = truebranch.evaluate(ite->iftrue);
-	owner->solver->popto(stacklevel);
+	owner->solver->pop();
+	owner->solver->push();
 	owner->solver->assertFormula(cond_result.negate());
 	CVC3::Expr false_ans = falsebranch.evaluate(ite->iffalse);
-	owner->solver->popto(stacklevel);
+	owner->solver->pop();
 	/* now merge the environments */
 	curframe().env.clear();
 	std::unordered_map<std::string, CVC3::Expr> &true_env = truebranch.curframe().env;
