@@ -1,0 +1,8 @@
+*.o
+*.d
+/main
+*~
+/grammar.cpp
+/grammar.h
+/grammar.out
+\#*#

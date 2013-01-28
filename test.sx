@@ -1,0 +1,12 @@
+function square(x) {
+  x * x;
+}
+
+suite {
+  a = symbolic();
+  test {
+    assume(a > 0);
+    assume(a < 4);
+    assert(square(a) >= a);
+  }
+}
