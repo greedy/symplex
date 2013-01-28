@@ -235,6 +235,7 @@ CVC3::Expr State::evaluate(Expr *e)
   else {
     throw std::logic_error(std::string("expression type ") + typeid(e).name() + " not handled");
   }
+  throw std::logic_error("some case forgot to return");
 }
 
 void Runner::run(Program *p)
