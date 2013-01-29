@@ -43,7 +43,7 @@ prog(P) ::= . { P = new Program(); }
 
 %type suite {Suite*}
 %destructor suite {delete $$;}
-suite(S) ::= SUITE LBRACE exprlist(I) tests(T) RBRACE. { S = new Suite(I, T); }
+suite(S) ::= SUITE IDENT(N) LBRACE exprlist(I) tests(T) RBRACE. { S = new Suite(N, I, T); }
 
 %type exprlist {std::vector<Expr*>*}
 %destructor exprlist { destroy($$); }
@@ -57,7 +57,7 @@ tests(C) ::= test(T). { C = new std::vector<Test*> { T }; }
 
 %type test {Test*}
 %destructor test { delete $$; }
-test(T) ::= TEST block(B). { T = new Test(B); }
+test(T) ::= TEST IDENT(N) block(B). { T = new Test(N, B); }
 
 %type fundef {Function*}
 %destructor fundef {delete $$;}

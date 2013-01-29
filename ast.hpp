@@ -75,14 +75,16 @@ struct Function {
   std::vector<Expr*> *body;
 };
 struct Test {
-  Test(std::vector<Expr*> *body_) : body(body_) {};
+  Test(std::string *name_, std::vector<Expr*> *body_) : name(name_), body(body_) {};
 
+  std::string *name;
   std::vector<Expr*> *body;
 };
 struct Suite {
-  Suite(std::vector<Expr*> *setup_, std::vector<Test*> *tests_)
-    : setup(setup_), tests(tests_) {};
+  Suite(std::string *name_, std::vector<Expr*> *setup_, std::vector<Test*> *tests_)
+    : name(name_), setup(setup_), tests(tests_) {};
 
+  std::string *name;
   std::vector<Expr*> *setup;
   std::vector<Test*> *tests;
 };

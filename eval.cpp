@@ -4,6 +4,67 @@
 
 #define BV_WIDTH 8
 
+template <typename C>
+typename C::value_type pop(C &c) {
+  typename C::value_type result = c.back();
+  c.pop_back();
+  return result;
+}
+
+template <typename C, typename T>
+void push(C &c, T &v) {
+  c.push_back(v);
+}
+
+template <typename F, typename T>
+void splice(T &to, F &from) {
+  to.insert(to.begin(), from.begin(), from.end());
+}
+
+namespace Instructions {
+  void Store::execute(MachineState &s) { s.env()[dest] = s.opstack.back(); }
+  void IfThenElse::execute(MachineState &s) {
+    CVC3::Expr cond = pop(s.opstack);
+    Status stat = s.runner->checkStatus(cond);
+    switch (stat) {
+    case MUST_BE_FALSE:
+      splice(s.code, iffalse);
+      break;
+    case MUST_BE_TRUE:
+      splice(s.code, iftrue);
+      break;
+    case TRUE_OR_FALSE:
+      {
+	MachineState &false_branch = s.runner->fork(s);
+	false_branch.assumptions.push_back(cond.negate());
+	splice(false_branch.code, iffalse);
+	s.assumptions.push_back(cond);
+	splice(s.code, iftrue);
+      }
+      break;
+    case NOT_TRUE_NOR_FALSE:
+      throw std::runtime_error("inconsistent state!");
+      break;
+    case UNKNOWN:
+      throw std::runtime_error("branch condition has unknown status!");
+      break;
+    }
+  }
+  void Call::execute(MachineState &s) {
+    CompiledFunction *target_fun = s.runner->compfunc_byname.at(target);
+    MachineState::environment callenv;
+    for (auto it = target_fun->params.rbegin(), ie = target_fun->params.rend();
+	 it != ie; ++it) {
+      callenv[*it] = pop(s.opstack);
+    }
+    s.envstack.push_back(std::move(callenv));
+    splice(s.code, target_fun->code);
+  }
+  void Return::execute(MachineState &s) {
+    s.envstack.pop_back();
+  }
+}
+
 static std::unordered_set<std::string> builtins =
   { "assert", "assume", "symbolic", "check" };
 
@@ -67,9 +128,9 @@ CVC3::Expr State::fun_check(CVC3::Expr e)
   if (owner->solver->incomplete(reasons)) {
     std::cout << "Incomplete results, reasons follow.\n";
     for (auto it = reasons.begin(), ie = reasons.end();
-	 it != ie; ++it)
+         it != ie; ++it)
       {
-	std::cout << *it << "\n";
+        std::cout << *it << "\n";
       }
   }
   switch (stat) {
@@ -81,15 +142,15 @@ CVC3::Expr State::fun_check(CVC3::Expr e)
       owner->solver->getConcreteModel(ce);
       std::cout << "Assertion can fail!\nHere's how:\n";
       for (auto it = callstack.rbegin(), ie = callstack.rend();
-	   it != ie; ++it)
-	{
-	  std::cout << "In " << it->name << ":\n";
-	  for (auto vit = it->env.begin(), vie = it->env.end();
-	       vit != vie; ++vit)
-	    {
-	      std::cout << "  " << vit->first << " = " << owner->solver->getValue(vit->second) << "\n";
-	    }
-	}
+           it != ie; ++it)
+        {
+          std::cout << "In " << it->name << ":\n";
+          for (auto vit = it->env.begin(), vie = it->env.end();
+               vit != vie; ++vit)
+            {
+              std::cout << "  " << vit->first << " = " << owner->solver->getValue(vit->second) << "\n";
+            }
+        }
     }
     break;
   case CVC3::ABORT:
@@ -119,29 +180,29 @@ CVC3::Expr State::evaluate(Expr *e)
       return evaluate(*ite->iffalse);
     case TRUE_OR_FALSE:
       {
-	State truebranch(*this), falsebranch(*this);
-	owner->solver->push();
-	owner->solver->assertFormula(cond_result);
-	CVC3::Expr true_ans = truebranch.evaluate(ite->iftrue);
-	owner->solver->pop();
-	owner->solver->push();
-	owner->solver->assertFormula(cond_result.negate());
-	CVC3::Expr false_ans = falsebranch.evaluate(ite->iffalse);
-	owner->solver->pop();
-	/* now merge the environments */
-	curframe().env.clear();
-	std::unordered_map<std::string, CVC3::Expr> &true_env = truebranch.curframe().env;
-	std::unordered_map<std::string, CVC3::Expr> &false_env = falsebranch.curframe().env;
-	for (auto it = true_env.begin(), ie = true_env.end();
-	     it != ie; ++it)
-	  {
-	    if (false_env.count(it->first)) {
+        State truebranch(*this), falsebranch(*this);
+        owner->solver->push();
+        owner->solver->assertFormula(cond_result);
+        CVC3::Expr true_ans = truebranch.evaluate(ite->iftrue);
+        owner->solver->pop();
+        owner->solver->push();
+        owner->solver->assertFormula(cond_result.negate());
+        CVC3::Expr false_ans = falsebranch.evaluate(ite->iffalse);
+        owner->solver->pop();
+        /* now merge the environments */
+        curframe().env.clear();
+        std::unordered_map<std::string, CVC3::Expr> &true_env = truebranch.curframe().env;
+        std::unordered_map<std::string, CVC3::Expr> &false_env = falsebranch.curframe().env;
+        for (auto it = true_env.begin(), ie = true_env.end();
+             it != ie; ++it)
+          {
+            if (false_env.count(it->first)) {
               curframe().env[it->first] = owner->solver->iteExpr(cond_result,
                                                       it->second,
                                                       false_env.at(it->first));
-	    }
-	  }
-	return owner->solver->iteExpr(cond_result, true_ans, false_ans);
+            }
+          }
+        return owner->solver->iteExpr(cond_result, true_ans, false_ans);
       }
     case NOT_TRUE_NOR_FALSE:
       /* the state is invalid */
@@ -157,19 +218,19 @@ CVC3::Expr State::evaluate(Expr *e)
     }
     else if (target_name == "assume") {
       if (ce->args->size() != 1) {
-	throw std::runtime_error("Wrong number of arguments to builtin function assume, expected 1 got " + std::to_string(ce->args->size()));
+        throw std::runtime_error("Wrong number of arguments to builtin function assume, expected 1 got " + std::to_string(ce->args->size()));
       }
       return fun_assume(evaluate(ce->args->at(0)));
     }
     else if (target_name == "assert") {
       if (ce->args->size() != 1) {
-	throw std::runtime_error("Wrong number of arguments to builtin function assume, expected 1 got " + std::to_string(ce->args->size()));
+        throw std::runtime_error("Wrong number of arguments to builtin function assume, expected 1 got " + std::to_string(ce->args->size()));
       }
       return fun_assert(evaluate(ce->args->at(0)));
     }
     else if (target_name == "check") {
       if (ce->args->size() != 1) {
-	throw std::runtime_error("Wrong number of arguments to builtin function assume, expected 1 got " + std::to_string(ce->args->size()));
+        throw std::runtime_error("Wrong number of arguments to builtin function assume, expected 1 got " + std::to_string(ce->args->size()));
       }
       return fun_check(evaluate(ce->args->at(0)));
     }
@@ -183,16 +244,16 @@ CVC3::Expr State::evaluate(Expr *e)
     std::vector<CVC3::Expr> arg_vals;
     arg_vals.reserve(ce->args->size());
     for (auto it = ce->args->begin(), ie = ce->args->end();
-	 it != ie; ++it)
+         it != ie; ++it)
       {
-	arg_vals.push_back(evaluate(*it));
+        arg_vals.push_back(evaluate(*it));
       }
     Activation act(this, target_name);
     auto ai = arg_vals.begin();
     for (auto pi = fun->params->begin(), pe = fun->params->end();
-	 pi != pe; ++pi, ++ai)
+         pi != pe; ++pi, ++ai)
       {
-	act.env[**pi] = *ai;
+        act.env[**pi] = *ai;
       }
     callstack.push_back(act);
     CVC3::Expr result = evaluate(fun->body);
@@ -203,9 +264,9 @@ CVC3::Expr State::evaluate(Expr *e)
     std::vector<CVC3::Expr> child_vals;
     child_vals.reserve(be->children->size());
     for (auto it = be->children->begin(), ie = be->children->end();
-	 it != ie; ++it)
+         it != ie; ++it)
       {
-	child_vals.push_back(evaluate(*it));
+        child_vals.push_back(evaluate(*it));
       }
     switch (be->op) {
     case BasicExpr::Plus:
@@ -259,12 +320,12 @@ void Runner::run(Program *p)
     {
       Function &f = **it;
       if (builtins.count(*f.name)) {
-	std::cerr << "Cannot replace builtin function " << *f.name << "\n";
-	return;
+        std::cerr << "Cannot replace builtin function " << *f.name << "\n";
+        return;
       }
       if (func_byname.count(*f.name)) {
-	std::cerr << "Function " << *f.name << " already defined\n";
-	return;
+        std::cerr << "Function " << *f.name << " already defined\n";
+        return;
       }
       func_byname.insert(std::make_pair(*f.name, &f));
     }
@@ -272,22 +333,27 @@ void Runner::run(Program *p)
        it != ie; ++it)
     {
       Suite &suite = **it;
+      std::cout << "Running suite " << *suite.name << "\n";
       State setup_state(this);
       try {
-	setup_state.evaluate(suite.setup);
-	for (auto it = suite.tests->begin(), ie = suite.tests->end();
-	     it != ie; ++it)
-	  {
-	    Test &test = **it;
-	    State test_state(setup_state);
-	    try {
-	      test_state.evaluate(test.body);
-	    } catch (CVC3::Exception &e) {
-	      std::cout << "Exception from CVC3: " << e.toString() << "\n";
-	    }
-	  }
+        std::cout << " Setting up suite... " << std::flush;
+        setup_state.evaluate(suite.setup);
+        std::cout << "done\n";
+        for (auto it = suite.tests->begin(), ie = suite.tests->end();
+             it != ie; ++it)
+          {
+            Test &test = **it;
+            std::cout << " Running test " << *test.name << "..." << std::flush;
+            State test_state(setup_state);
+            try {
+              test_state.evaluate(test.body);
+            } catch (CVC3::Exception &e) {
+              std::cout << "Exception from CVC3: " << e.toString() << "\n";
+            }
+            std::cout << "passed\n";
+          }
       } catch (CVC3::Exception &e) {
-	std::cout << "Exception from CVC3: " << e.toString() << "\n";
+        std::cout << "Exception from CVC3: " << e.toString() << "\n";
       }
     }
 }

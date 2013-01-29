@@ -3,20 +3,22 @@ function gcd(a,b) {
   else { gcd(b, a % b); };
 }
 
-suite {
+suite small_tests {
   a = symbolic();
   b = symbolic();
-  assume(a < 5);
-  assume(b < 5);
+  assume(a < 8);
+  assume(b < 8);
   assume(a > 0);
   assume(b > 0);
+  assume(a < b);
   r = gcd(a,b);
-  test {
+  test gcd_divides_arguments {
     check(a % r == 0);
     check(b % r == 0);
   }
-  test {
+  test gcd_is_greatest {
     c = symbolic();
+    assume(c > 0);
     assume(a % c == 0);
     assume(b % c == 0);
     check(c <= r);
