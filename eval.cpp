@@ -272,17 +272,22 @@ void Runner::run(Program *p)
        it != ie; ++it)
     {
       Suite &suite = **it;
-      for (auto it = suite.tests->begin(), ie = suite.tests->end();
-	   it != ie; ++it)
-	{
-	  Test &test = **it;
-	  State state(this);
-	  try {
-	    state.evaluate(suite.setup);
-	    state.evaluate(test.body);
-	  } catch (CVC3::Exception &e) {
-	    std::cout << "Exception from CVC3: " << e.toString() << "\n";
+      State setup_state(this);
+      try {
+	setup_state.evaluate(suite.setup);
+	for (auto it = suite.tests->begin(), ie = suite.tests->end();
+	     it != ie; ++it)
+	  {
+	    Test &test = **it;
+	    State test_state(setup_state);
+	    try {
+	      test_state.evaluate(test.body);
+	    } catch (CVC3::Exception &e) {
+	      std::cout << "Exception from CVC3: " << e.toString() << "\n";
+	    }
 	  }
-	}
+      } catch (CVC3::Exception &e) {
+	std::cout << "Exception from CVC3: " << e.toString() << "\n";
+      }
     }
 }
