@@ -4,7 +4,7 @@ main: main.o grammar.o lex.o parser.o ast.o eval.o
 	g++ -O3 -flto `pkg-config --libs cvc3` -o $@ $^
 
 clean:
-	rm *.o main grammar.cpp lex.cpp
+	rm -f *.o *.d main grammar.cpp lex.cpp
 
 -include *.d
 
