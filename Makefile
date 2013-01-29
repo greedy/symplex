@@ -1,7 +1,7 @@
-CXXFLAGS = -g -Wall -std=c++11 -MMD -MP -fpermissive
+CXXFLAGS = -O3 -flto -Wall -std=c++11 -MMD -MP -fpermissive
 
 main: main.o grammar.o lex.o parser.o ast.o eval.o
-	g++ -g `pkg-config --libs cvc3` -o $@ $^
+	g++ -O3 -flto `pkg-config --libs cvc3` -o $@ $^
 
 clean:
 	rm *.o main grammar.cpp lex.cpp
