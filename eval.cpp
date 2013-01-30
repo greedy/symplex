@@ -21,19 +21,15 @@ void push(C &c, typename C::value_type v) {
 }
 
 void splice(std::list<Instruction*> &to, std::vector<std::unique_ptr<Instruction> > &from) {
-  std::transform(from.begin(), from.end(), to.begin(),
-		 [](const std::unique_ptr<Instruction> &ip){return ip.get();});
-}
-
-void splice(std::list<Instruction*> &to, std::vector<std::unique_ptr<Instruction> > &from,
-	    std::list<Instruction*>::iterator where) {
-  std::transform(from.begin(), from.end(), where,
-		 [](const std::unique_ptr<Instruction> &ip){return ip.get();});
+  for (auto it = from.rbegin(), ie = from.rend();
+       it != ie; ++it) {
+    to.push_front(it->get());
+  }
 }
 
 namespace Instructions {
   void Store::execute(MachineState &s) {
-    s.env()[dest] = s.opstack.back();
+    s.env()[dest] = s.copy(s.opstack.back());
   }
   void IfThenElse::execute(MachineState &s) {
     BtorNode* cond = pop(s.opstack);
@@ -50,7 +46,7 @@ namespace Instructions {
 	MachineState &false_branch = s.runner->fork(s);
 	false_branch.assumptions.push_back(boolector_not(s.runner->btor, cond));
 	splice(false_branch.code, iffalse);
-	s.assumptions.push_back(cond);
+	s.assumptions.push_back(s.copy(cond));
 	splice(s.code, iftrue);
       }
       break;
@@ -61,18 +57,21 @@ namespace Instructions {
       throw std::runtime_error("branch condition has unknown status!");
       break;
     }
+    s.release(cond);
   }
   void Call::execute(MachineState &s) {
-    CompiledFunction *target_fun = s.runner->compfunc_byname.at(target);
+    CompiledFunction &target_fun = *s.runner->compfunc_byname.at(target);
     s.envstack.emplace_back();
-    for (auto it = target_fun->params.rbegin(), ie = target_fun->params.rend();
+    for (auto it = target_fun.params.rbegin(), ie = target_fun.params.rend();
 	 it != ie; ++it) {
       s.env()[*it] = pop(s.opstack);
     }
-    s.trace.push_back(target_fun->name);
-    splice(s.code, target_fun->code);
+    s.trace.push_back(target_fun.name);
+    splice(s.code, target_fun.code);
   }
   void Return::execute(MachineState &s) {
+    std::for_each(s.env().begin(), s.env().end(),
+		  [&s](const std::pair<std::string,BtorNode*> &i){s.release(i.second);});
     s.envstack.pop_back();
     s.trace.pop_back();
   }
@@ -80,65 +79,87 @@ namespace Instructions {
     BtorNode* y = pop(s.opstack);
     BtorNode* x = pop(s.opstack);
     push(s.opstack, boolector_add(s.runner->btor, x, y));
+    s.release(x);
+    s.release(y);
   }
   void Sub::execute(MachineState &s) {
     BtorNode* y = pop(s.opstack);
     BtorNode* x = pop(s.opstack);
     push(s.opstack, boolector_sub(s.runner->btor, x, y));
+    s.release(x);
+    s.release(y);
   }
   void Mult::execute(MachineState &s) {
     BtorNode* y = pop(s.opstack);
     BtorNode* x = pop(s.opstack);
     push(s.opstack, boolector_mul(s.runner->btor, x, y));
+    s.release(x);
+    s.release(y);
   }
   void Div::execute(MachineState &s) {
     BtorNode* y = pop(s.opstack);
     BtorNode* x = pop(s.opstack);
     push(s.opstack, boolector_sdiv(s.runner->btor, x, y));
+    s.release(x);
+    s.release(y);
   }
   void Mod::execute(MachineState &s) {
     BtorNode* y = pop(s.opstack);
     BtorNode* x = pop(s.opstack);
     push(s.opstack, boolector_smod(s.runner->btor, x, y));
+    s.release(x);
+    s.release(y);
   }
   void Eq::execute(MachineState &s) {
     BtorNode* y = pop(s.opstack);
     BtorNode* x = pop(s.opstack);
     push(s.opstack, boolector_eq(s.runner->btor, x, y));
+    s.release(x);
+    s.release(y);
   }
   void Lt::execute(MachineState &s) {
     BtorNode* y = pop(s.opstack);
     BtorNode* x = pop(s.opstack);
     push(s.opstack, boolector_slt(s.runner->btor, x, y));
+    s.release(x);
+    s.release(y);
   }
   void Gt::execute(MachineState &s) {
     BtorNode* y = pop(s.opstack);
     BtorNode* x = pop(s.opstack);
     push(s.opstack, boolector_sgt(s.runner->btor, x, y));
+    s.release(x);
+    s.release(y);
   }
   void Le::execute(MachineState &s) {
     BtorNode* y = pop(s.opstack);
     BtorNode* x = pop(s.opstack);
     push(s.opstack, boolector_slte(s.runner->btor, x, y));
+    s.release(x);
+    s.release(y);
   }
   void Ge::execute(MachineState &s) {
     BtorNode* y = pop(s.opstack);
     BtorNode* x = pop(s.opstack);
-    push(s.opstack, boolector_sgte(s.runner->btor, y, x));
+    push(s.opstack, boolector_sgte(s.runner->btor, x, y));
+    s.release(x);
+    s.release(y);
   }
   void Ne::execute(MachineState &s) {
     BtorNode* y = pop(s.opstack);
     BtorNode* x = pop(s.opstack);
     push(s.opstack, boolector_ne(s.runner->btor, x, y));
+    s.release(x);
+    s.release(y);
   }
   void LoadConst::execute(MachineState &s) {
     push(s.opstack, boolector_int(s.runner->btor, value, BV_WIDTH));
   }
   void LoadVar::execute(MachineState &s) {
-    push(s.opstack, s.env().at(name));
+    push(s.opstack, s.copy(s.env().at(name)));
   }
   void Pop::execute(MachineState &s) {
-    pop(s.opstack);
+    s.release(pop(s.opstack));
   }
   void LoadSymbolic::execute(MachineState &s) {
     push(s.opstack, boolector_var(s.runner->btor, BV_WIDTH, NULL));
@@ -149,6 +170,7 @@ namespace Instructions {
     BtorNode* not_e = boolector_not(s.runner->btor, e);
     boolector_assume(s.runner->btor, not_e);
     int stat = boolector_sat(s.runner->btor);
+    s.release(not_e);
     switch (stat) {
     case BOOLECTOR_UNSAT:
       break;
@@ -179,7 +201,7 @@ namespace Instructions {
     }
   }
   void Assume::execute(MachineState &s) {
-    s.assumptions.push_back(s.opstack.back());
+    s.assumptions.push_back(s.copy(s.opstack.back()));
     s.apply_assumptions();
     if (boolector_sat(s.runner->btor) == BOOLECTOR_UNSAT) {
       throw assumptions_failed();
@@ -237,11 +259,11 @@ void Runner::compileExpr(Expr *e, std::vector<std::unique_ptr<Instruction> > &co
     code.emplace_back(new Instructions::Store(*ae->name));
   }
   else if (IfThenElseExpr *itee = dynamic_cast<IfThenElseExpr*>(e)) {
-    std::vector<std::unique_ptr<Instruction> > iftrue, iffalse;
-    compileBody(*itee->iftrue, iftrue);
-    compileBody(*itee->iffalse, iffalse);
     compileExpr(itee->cond, code);
-    code.emplace_back(new Instructions::IfThenElse(std::move(iftrue), std::move(iffalse)));
+    Instructions::IfThenElse *i = new Instructions::IfThenElse();
+    compileBody(*itee->iftrue, i->iftrue);
+    compileBody(*itee->iffalse, i->iffalse);
+    code.emplace_back(i);
   }
   else if (CallExpr *ce = dynamic_cast<CallExpr*>(e)) {
     for (auto it = ce->args->begin(), ie = ce->args->end();
@@ -337,7 +359,7 @@ void Runner::compile(Program *p)
       cf->name = *f.name;
       std::transform(f.params->begin(), f.params->end(), std::back_inserter(cf->params),
 		     [] (std::string *sp) { return *sp; });
-      compfunc_byname[cf->name] = cf;
+      compfunc_byname.insert(std::make_pair(cf->name, std::unique_ptr<CompiledFunction>(cf)));
       compileBody(*f.body, cf->code);
       cf->code.emplace_back(new Instructions::Return());
     }
@@ -382,8 +404,16 @@ void Runner::runSuites()
 	  s.runner = this;
 	  s.envstack.emplace_back();
 	  s.trace.emplace_back(it->name + "/" + tt->name);
-	  splice(s.code, it->setup_code, s.code.end());
-	  splice(s.code, tt->code, s.code.end());
+	  for (auto iit = it->setup_code.begin(), iie = it->setup_code.end();
+	       iit != iie; ++iit)
+	    {
+	      s.code.push_back(iit->get());
+	    }
+	  for (auto iit = tt->code.begin(), iie = tt->code.end();
+	       iit != iie; ++iit)
+	    {
+	      s.code.push_back(iit->get());
+	    }
 	  runStates();
 	}
     }

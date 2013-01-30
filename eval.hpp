@@ -39,22 +39,57 @@ struct MachineState {
   std::list<Instruction*> code;
   std::vector<BtorNode*> assumptions;
   void apply_assumptions();
+  void release(BtorNode *n);
+  BtorNode *copy(BtorNode *n);
+
+  ~MachineState() {
+    for (auto &e : envstack) {
+      for (auto &p : e) {
+	release(p.second);
+      }
+    }
+    for (auto &a : assumptions) {
+      release(a);
+    }
+    for (auto &o : opstack) {
+      release(o);
+    }
+  }
+
+  MachineState() = default;
+
+  MachineState(const MachineState &other)
+    : runner(other.runner), envstack(other.envstack), trace(other.trace)
+    , code(other.code), assumptions(other.assumptions)
+  {
+    for (auto &e : envstack) {
+      for (auto &p : e) {
+	p.second = copy(p.second);
+      }
+    }
+    for (auto &a : assumptions) {
+      a = copy(a);
+    }
+    for (auto &o : opstack) {
+      o = copy(o);
+    }
+  }
 };
 
 struct CompiledFunction {
   std::string name;
   std::vector<std::string> params;
-  std::vector<std::unique_ptr<Instruction>> code;
+  std::vector<std::unique_ptr<Instruction> > code;
 };
 
 struct CompiledTest {
   std::string name;
-  std::vector<std::unique_ptr<Instruction>> code;
+  std::vector<std::unique_ptr<Instruction> > code;
 };
 
 struct CompiledSuite {
   std::string name;
-  std::vector<std::unique_ptr<Instruction>> setup_code;
+  std::vector<std::unique_ptr<Instruction> > setup_code;
   std::vector<CompiledTest> tests;
 };
 
@@ -72,10 +107,6 @@ namespace Instructions {
   struct IfThenElse : Instruction {
     std::vector<std::unique_ptr<Instruction> > iftrue, iffalse;
     void execute(MachineState &s);
-    IfThenElse(std::vector<std::unique_ptr<Instruction> > &&iftrue_, std::vector<std::unique_ptr<Instruction> > &&iffalse_) {
-      std::move(iftrue_.begin(), iftrue_.end(), iftrue.begin());
-      std::move(iffalse_.begin(), iffalse_.end(), iffalse.begin());
-    }
   };
   struct Call : Instruction {
     std::string target;
@@ -143,7 +174,7 @@ namespace Instructions {
 }
 
 struct Runner {
-  std::unordered_map<std::string, CompiledFunction*> compfunc_byname;
+  std::unordered_map<std::string, std::unique_ptr<CompiledFunction> > compfunc_byname;
   std::vector<CompiledSuite> suites;
   Btor *btor;
 
@@ -158,6 +189,10 @@ struct Runner {
     compile(p);
   };
 
+  ~Runner() {
+    boolector_delete(btor);
+  }
+
   void runSuites();
 
 private:
@@ -166,5 +201,8 @@ private:
   void compileBody(std::vector<Expr*> &body, std::vector<std::unique_ptr<Instruction> > &code);
   void runStates();
 };
+
+inline void MachineState::release(BtorNode *n) { boolector_release(runner->btor, n); }
+inline BtorNode *MachineState::copy(BtorNode *n) { return boolector_copy(runner->btor, n); }
 
 #endif
