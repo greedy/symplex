@@ -2,11 +2,11 @@ function square(x) {
   x * x;
 }
 
-suite {
+suite simple {
   a = symbolic();
-  test {
+  test a {
     assume(a > 0);
-    assume(a < 4);
+    assume(a <= 11);
     assert(square(a) >= a);
   }
 }
