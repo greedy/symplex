@@ -6,11 +6,9 @@ function gcd(a,b) {
 suite small_tests {
   a = symbolic();
   b = symbolic();
-  assume(a < 8);
-  assume(b < 8);
   assume(a > 0);
   assume(b > 0);
-  assume(a < b);
+  assume(a > b);
   r = gcd(a,b);
   test gcd_divides_arguments {
     check(a % r == 0);
