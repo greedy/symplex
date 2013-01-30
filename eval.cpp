@@ -20,9 +20,15 @@ void push(C &c, typename C::value_type v) {
   c.push_back(v);
 }
 
-template <typename F, typename T>
-void splice(T &to, F &from) {
-  to.insert(to.begin(), from.begin(), from.end());
+void splice(std::list<Instruction*> &to, std::vector<std::unique_ptr<Instruction> > &from) {
+  std::transform(from.begin(), from.end(), to.begin(),
+		 [](const std::unique_ptr<Instruction> &ip){return ip.get();});
+}
+
+void splice(std::list<Instruction*> &to, std::vector<std::unique_ptr<Instruction> > &from,
+	    std::list<Instruction*>::iterator where) {
+  std::transform(from.begin(), from.end(), where,
+		 [](const std::unique_ptr<Instruction> &ip){return ip.get();});
 }
 
 namespace Instructions {
@@ -212,30 +218,30 @@ Status MachineState::checkStatus(BtorNode* e)
   }
 }
 
-void Runner::compileBody(std::vector<Expr*> &body, std::vector<Instruction*> &code)
+void Runner::compileBody(std::vector<Expr*> &body, std::vector<std::unique_ptr<Instruction> > &code)
 {
   for (auto it = body.begin(), ie = body.end();
        it != ie; ++it)
     {
       compileExpr(*it, code);
       if (it != ie - 1) {
-	code.push_back(new Instructions::Pop());
+	code.emplace_back(new Instructions::Pop());
       }
     }
 }
 
-void Runner::compileExpr(Expr *e, std::vector<Instruction*> &code)
+void Runner::compileExpr(Expr *e, std::vector<std::unique_ptr<Instruction> > &code)
 {
   if (AssignExpr* ae = dynamic_cast<AssignExpr*>(e)) {
     compileExpr(ae->expr, code);
-    code.push_back(new Instructions::Store(*ae->name));
+    code.emplace_back(new Instructions::Store(*ae->name));
   }
   else if (IfThenElseExpr *itee = dynamic_cast<IfThenElseExpr*>(e)) {
-    std::vector<Instruction*> iftrue, iffalse;
+    std::vector<std::unique_ptr<Instruction> > iftrue, iffalse;
     compileBody(*itee->iftrue, iftrue);
     compileBody(*itee->iffalse, iffalse);
     compileExpr(itee->cond, code);
-    code.push_back(new Instructions::IfThenElse(iftrue, iffalse));
+    code.emplace_back(new Instructions::IfThenElse(std::move(iftrue), std::move(iffalse)));
   }
   else if (CallExpr *ce = dynamic_cast<CallExpr*>(e)) {
     for (auto it = ce->args->begin(), ie = ce->args->end();
@@ -247,25 +253,25 @@ void Runner::compileExpr(Expr *e, std::vector<Instruction*> &code)
       if (ce->args->size() != 0) {
 	throw std::runtime_error("wrong number of arguments to builtin 'symbolic'");
       }
-      code.push_back(new Instructions::LoadSymbolic());
+      code.emplace_back(new Instructions::LoadSymbolic());
     } else if (*ce->target == "check") {
       if (ce->args->size() != 1) {
 	throw std::runtime_error("wrong number of arguments to builtin 'check'");
       }
-      code.push_back(new Instructions::Check());
+      code.emplace_back(new Instructions::Check());
     } else if (*ce->target == "assert") {
       if (ce->args->size() != 1) {
 	throw std::runtime_error("wrong number of arguments to builtin 'assert'");
       }
-      code.push_back(new Instructions::Check());
-      code.push_back(new Instructions::Assume());
+      code.emplace_back(new Instructions::Check());
+      code.emplace_back(new Instructions::Assume());
     } else if (*ce->target == "assume") {
       if (ce->args->size() != 1) {
 	throw std::runtime_error("wrong number of arguments to builtin 'assume'");
       }
-      code.push_back(new Instructions::Assume());
+      code.emplace_back(new Instructions::Assume());
     } else {
-      code.push_back(new Instructions::Call(*ce->target));
+      code.emplace_back(new Instructions::Call(*ce->target));
     }
   }
   else if (BasicExpr *be = dynamic_cast<BasicExpr*>(e)) {
@@ -273,45 +279,45 @@ void Runner::compileExpr(Expr *e, std::vector<Instruction*> &code)
 		  [this,&code](Expr *se) { compileExpr(se, code); });
     switch (be->op) {
     case BasicExpr::Plus:
-      code.push_back(new Instructions::Add());
+      code.emplace_back(new Instructions::Add());
       break;
     case BasicExpr::Minus:
-      code.push_back(new Instructions::Sub());
+      code.emplace_back(new Instructions::Sub());
       break;
     case BasicExpr::Times:
-      code.push_back(new Instructions::Mult());
+      code.emplace_back(new Instructions::Mult());
       break;
     case BasicExpr::Divide:
-      code.push_back(new Instructions::Div());
+      code.emplace_back(new Instructions::Div());
       break;
     case BasicExpr::Mod:
-      code.push_back(new Instructions::Mod());
+      code.emplace_back(new Instructions::Mod());
       break;
     case BasicExpr::Eq:
-      code.push_back(new Instructions::Eq());
+      code.emplace_back(new Instructions::Eq());
       break;
     case BasicExpr::Lt:
-      code.push_back(new Instructions::Lt());
+      code.emplace_back(new Instructions::Lt());
       break;
     case BasicExpr::Gt:
-      code.push_back(new Instructions::Gt());
+      code.emplace_back(new Instructions::Gt());
       break;
     case BasicExpr::Le:
-      code.push_back(new Instructions::Le());
+      code.emplace_back(new Instructions::Le());
       break;
     case BasicExpr::Ge:
-      code.push_back(new Instructions::Ge());
+      code.emplace_back(new Instructions::Ge());
       break;
     case BasicExpr::Ne:
-      code.push_back(new Instructions::Ne());
+      code.emplace_back(new Instructions::Ne());
       break;
     }
   }
   else if (ConstExpr *ce = dynamic_cast<ConstExpr*>(e)) {
-    code.push_back(new Instructions::LoadConst(std::stol(*ce->cv)));
+    code.emplace_back(new Instructions::LoadConst(std::stol(*ce->cv)));
   }
   else if (VarExpr *ve = dynamic_cast<VarExpr*>(e)) {
-    code.push_back(new Instructions::LoadVar(*ve->var));
+    code.emplace_back(new Instructions::LoadVar(*ve->var));
   }
   else if (LabeledExpr *le = dynamic_cast<LabeledExpr*>(le)) {
     compileExpr(le->expr, code);
@@ -333,7 +339,7 @@ void Runner::compile(Program *p)
 		     [] (std::string *sp) { return *sp; });
       compfunc_byname[cf->name] = cf;
       compileBody(*f.body, cf->code);
-      cf->code.push_back(new Instructions::Return());
+      cf->code.emplace_back(new Instructions::Return());
     }
   for (auto it = p->suites.begin(), ie = p->suites.end();
        it != ie; ++it)
@@ -376,8 +382,8 @@ void Runner::runSuites()
 	  s.runner = this;
 	  s.envstack.emplace_back();
 	  s.trace.emplace_back(it->name + "/" + tt->name);
-	  s.code.insert(s.code.end(), it->setup_code.begin(), it->setup_code.end());
-	  s.code.insert(s.code.end(), tt->code.begin(), tt->code.end());
+	  splice(s.code, it->setup_code, s.code.end());
+	  splice(s.code, tt->code, s.code.end());
 	  runStates();
 	}
     }

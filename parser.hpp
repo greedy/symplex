@@ -10,8 +10,9 @@ class Parser {
   int cs, act;
   char *p, *pe, *eof, *ts, *te;
 
-  void *lemParser;
+  void *lemParser = 0;
 public:
+  ~Parser();
   Program *result;
   void parse(char *begin, char *end);
 };

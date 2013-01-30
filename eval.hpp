@@ -13,6 +13,7 @@ extern "C" {
 #include <unordered_map>
 #include <iostream>
 #include <algorithm>
+#include <memory>
 
 class State;
 class Runner;
@@ -43,17 +44,17 @@ struct MachineState {
 struct CompiledFunction {
   std::string name;
   std::vector<std::string> params;
-  std::vector<Instruction*> code;
+  std::vector<std::unique_ptr<Instruction>> code;
 };
 
 struct CompiledTest {
   std::string name;
-  std::vector<Instruction*> code;
+  std::vector<std::unique_ptr<Instruction>> code;
 };
 
 struct CompiledSuite {
   std::string name;
-  std::vector<Instruction*> setup_code;
+  std::vector<std::unique_ptr<Instruction>> setup_code;
   std::vector<CompiledTest> tests;
 };
 
@@ -69,10 +70,12 @@ namespace Instructions {
     Store(std::string &dest_) : dest(dest_) {}
   };
   struct IfThenElse : Instruction {
-    std::vector<Instruction*> iftrue, iffalse;
+    std::vector<std::unique_ptr<Instruction> > iftrue, iffalse;
     void execute(MachineState &s);
-    IfThenElse(std::vector<Instruction*> &iftrue_, std::vector<Instruction*> &iffalse_)
-      : iftrue(iftrue_), iffalse(iffalse_) {}
+    IfThenElse(std::vector<std::unique_ptr<Instruction> > &&iftrue_, std::vector<std::unique_ptr<Instruction> > &&iffalse_) {
+      std::move(iftrue_.begin(), iftrue_.end(), iftrue.begin());
+      std::move(iffalse_.begin(), iffalse_.end(), iffalse.begin());
+    }
   };
   struct Call : Instruction {
     std::string target;
@@ -159,8 +162,8 @@ struct Runner {
 
 private:
   void compile(Program *p);
-  void compileExpr(Expr *e, std::vector<Instruction*> &code);
-  void compileBody(std::vector<Expr*> &body, std::vector<Instruction*> &code);
+  void compileExpr(Expr *e, std::vector<std::unique_ptr<Instruction> > &code);
+  void compileBody(std::vector<Expr*> &body, std::vector<std::unique_ptr<Instruction> > &code);
   void runStates();
 };
 

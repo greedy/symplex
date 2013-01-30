@@ -5,14 +5,6 @@
 %include {#include "ast.hpp"}
 %include {#include "parser.hpp"}
 %include {#include <iostream>}
-%include {
-template <typename T>
-void destroy(std::vector<T*> *c)
-{
-  std::for_each(c->begin(), c->end(), std::default_delete<T>());
-  delete c;
-}
-}
 
 %right ASSIGN.
 %left SHARP.

@@ -2,10 +2,14 @@ function square(x) {
   x * x;
 }
 
+
 suite simple {
   a = symbolic();
-  test a {
-    assume(a > 0);
+  assume(a > 0);
+  test bad {
+    assert(square(a) >= a);
+  }
+  test ok {
     assume(a <= 11);
     assert(square(a) >= a);
   }

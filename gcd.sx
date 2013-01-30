@@ -8,7 +8,6 @@ suite small_tests {
   b = symbolic();
   assume(a > 0);
   assume(b > 0);
-  assume(a > b);
   r = gcd(a,b);
   test gcd_divides_arguments {
     check(a % r == 0);
