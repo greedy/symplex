@@ -30,8 +30,8 @@ namespace Instructions {
     s.env()[dest] = s.opstack.back();
   }
   void IfThenElse::execute(MachineState &s) {
-    CVC3::Expr cond = pop(s.opstack);
-    Status stat = s.runner->checkStatus(cond);
+    BtorNode* cond = pop(s.opstack);
+    Status stat = s.checkStatus(cond);
     switch (stat) {
     case MUST_BE_FALSE:
       splice(s.code, iffalse);
@@ -42,10 +42,9 @@ namespace Instructions {
     case TRUE_OR_FALSE:
       {
 	MachineState &false_branch = s.runner->fork(s);
-	false_branch.assumptions.push_back(cond.negate());
+	false_branch.assumptions.push_back(boolector_not(s.runner->btor, cond));
 	splice(false_branch.code, iffalse);
 	s.assumptions.push_back(cond);
-	s.runner->solver->assertFormula(cond);
 	splice(s.code, iftrue);
       }
       break;
@@ -58,7 +57,6 @@ namespace Instructions {
     }
   }
   void Call::execute(MachineState &s) {
-    std::cout << "Calling " << target << " " << s.envstack.size() << "\n";
     CompiledFunction *target_fun = s.runner->compfunc_byname.at(target);
     s.envstack.emplace_back();
     for (auto it = target_fun->params.rbegin(), ie = target_fun->params.rend();
@@ -69,67 +67,66 @@ namespace Instructions {
     splice(s.code, target_fun->code);
   }
   void Return::execute(MachineState &s) {
-    std::cout << "Returning " << s.envstack.size() << "\n";
     s.envstack.pop_back();
     s.trace.pop_back();
   }
   void Add::execute(MachineState &s) {
-    CVC3::Expr y = pop(s.opstack);
-    CVC3::Expr x = pop(s.opstack);
-    push(s.opstack, s.runner->solver->newBVPlusExpr(BV_WIDTH, x, y));
+    BtorNode* y = pop(s.opstack);
+    BtorNode* x = pop(s.opstack);
+    push(s.opstack, boolector_add(s.runner->btor, x, y));
   }
   void Sub::execute(MachineState &s) {
-    CVC3::Expr y = pop(s.opstack);
-    CVC3::Expr x = pop(s.opstack);
-    push(s.opstack, s.runner->solver->newBVSubExpr(x, y));
+    BtorNode* y = pop(s.opstack);
+    BtorNode* x = pop(s.opstack);
+    push(s.opstack, boolector_sub(s.runner->btor, x, y));
   }
   void Mult::execute(MachineState &s) {
-    CVC3::Expr y = pop(s.opstack);
-    CVC3::Expr x = pop(s.opstack);
-    push(s.opstack, s.runner->solver->newBVMultExpr(BV_WIDTH, x, y));
+    BtorNode* y = pop(s.opstack);
+    BtorNode* x = pop(s.opstack);
+    push(s.opstack, boolector_mul(s.runner->btor, x, y));
   }
   void Div::execute(MachineState &s) {
-    CVC3::Expr y = pop(s.opstack);
-    CVC3::Expr x = pop(s.opstack);
-    push(s.opstack, s.runner->solver->newBVSDivExpr(x, y));
+    BtorNode* y = pop(s.opstack);
+    BtorNode* x = pop(s.opstack);
+    push(s.opstack, boolector_sdiv(s.runner->btor, x, y));
   }
   void Mod::execute(MachineState &s) {
-    CVC3::Expr y = pop(s.opstack);
-    CVC3::Expr x = pop(s.opstack);
-    push(s.opstack, s.runner->solver->newBVSModExpr(x, y));
+    BtorNode* y = pop(s.opstack);
+    BtorNode* x = pop(s.opstack);
+    push(s.opstack, boolector_smod(s.runner->btor, x, y));
   }
   void Eq::execute(MachineState &s) {
-    CVC3::Expr y = pop(s.opstack);
-    CVC3::Expr x = pop(s.opstack);
-    push(s.opstack, s.runner->solver->eqExpr(x, y));
+    BtorNode* y = pop(s.opstack);
+    BtorNode* x = pop(s.opstack);
+    push(s.opstack, boolector_eq(s.runner->btor, x, y));
   }
   void Lt::execute(MachineState &s) {
-    CVC3::Expr y = pop(s.opstack);
-    CVC3::Expr x = pop(s.opstack);
-    push(s.opstack, s.runner->solver->newBVSLTExpr(x, y));
+    BtorNode* y = pop(s.opstack);
+    BtorNode* x = pop(s.opstack);
+    push(s.opstack, boolector_slt(s.runner->btor, x, y));
   }
   void Gt::execute(MachineState &s) {
-    CVC3::Expr y = pop(s.opstack);
-    CVC3::Expr x = pop(s.opstack);
-    push(s.opstack, s.runner->solver->newBVSLTExpr(y, x));
+    BtorNode* y = pop(s.opstack);
+    BtorNode* x = pop(s.opstack);
+    push(s.opstack, boolector_sgt(s.runner->btor, x, y));
   }
   void Le::execute(MachineState &s) {
-    CVC3::Expr y = pop(s.opstack);
-    CVC3::Expr x = pop(s.opstack);
-    push(s.opstack, s.runner->solver->newBVSLEExpr(x, y));
+    BtorNode* y = pop(s.opstack);
+    BtorNode* x = pop(s.opstack);
+    push(s.opstack, boolector_slte(s.runner->btor, x, y));
   }
   void Ge::execute(MachineState &s) {
-    CVC3::Expr y = pop(s.opstack);
-    CVC3::Expr x = pop(s.opstack);
-    push(s.opstack, s.runner->solver->newBVSLEExpr(y, x));
+    BtorNode* y = pop(s.opstack);
+    BtorNode* x = pop(s.opstack);
+    push(s.opstack, boolector_sgte(s.runner->btor, y, x));
   }
   void Ne::execute(MachineState &s) {
-    CVC3::Expr y = pop(s.opstack);
-    CVC3::Expr x = pop(s.opstack);
-    push(s.opstack, s.runner->solver->eqExpr(x, y).negate());
+    BtorNode* y = pop(s.opstack);
+    BtorNode* x = pop(s.opstack);
+    push(s.opstack, boolector_ne(s.runner->btor, x, y));
   }
   void LoadConst::execute(MachineState &s) {
-    push(s.opstack, s.runner->solver->newBVConstExpr(CVC3::Rational(value), BV_WIDTH));
+    push(s.opstack, boolector_int(s.runner->btor, value, BV_WIDTH));
   }
   void LoadVar::execute(MachineState &s) {
     push(s.opstack, s.env().at(name));
@@ -138,28 +135,19 @@ namespace Instructions {
     pop(s.opstack);
   }
   void LoadSymbolic::execute(MachineState &s) {
-    static int id = 0;
-    push(s.opstack, s.runner->solver->varExpr("var_" + std::to_string(++id), s.runner->solver->bitvecType(BV_WIDTH)));
+    push(s.opstack, boolector_var(s.runner->btor, BV_WIDTH, NULL));
   }
   void Check::execute(MachineState &s) {
-    CVC3::Expr &e = s.opstack.back();
-    CVC3::QueryResult stat = s.runner->solver->query(e);
-    std::vector<std::string> reasons;
-    if (s.runner->solver->incomplete(reasons)) {
-      std::cout << "Incomplete results, reasons follow.\n";
-      for (auto it = reasons.begin(), ie = reasons.end();
-	   it != ie; ++it)
-	{
-	  std::cout << *it << "\n";
-	}
-    }
+    BtorNode* &e = s.opstack.back();
+    s.apply_assumptions();
+    BtorNode* not_e = boolector_not(s.runner->btor, e);
+    boolector_assume(s.runner->btor, not_e);
+    int stat = boolector_sat(s.runner->btor);
     switch (stat) {
-    case CVC3::VALID:
+    case BOOLECTOR_UNSAT:
       break;
-    case CVC3::INVALID:
+    case BOOLECTOR_SAT:
       {
-	CVC3::ExprMap<CVC3::Expr> ce;
-	s.runner->solver->getConcreteModel(ce);
 	std::cout << "Assertion can fail!\nHere's how:\n";
 	auto tt = s.trace.rbegin();
 	for (auto it = s.envstack.rbegin(), ie = s.envstack.rend();
@@ -169,24 +157,25 @@ namespace Instructions {
 	    for (auto vit = it->begin(), vie = it->end();
 		 vit != vie; ++vit)
 	      {
-		std::cout << "  " << vit->first << " = " << s.runner->solver->getValue(vit->second) << "\n";
+		char *sval = boolector_bv_assignment(s.runner->btor, vit->second);
+		std::string ssval(sval);
+		std::replace(ssval.begin(), ssval.end(), 'x', '0');
+		int ival = std::stoi(ssval, 0, 2);
+		if (ival & (1 << (BV_WIDTH-1))) {
+		  ival = -((1<<BV_WIDTH)-ival);
+		}
+		std::cout << "  " << vit->first << " = " << sval << " (" << ival << ")\n";
+		boolector_free_bv_assignment(s.runner->btor, sval);
 	      }
 	  }
-	s.runner->solver->returnFromCheck();
       }
-      break;
-    case CVC3::ABORT:
-      throw std::runtime_error("unhandled ABORT");
-      break;
-    case CVC3::UNKNOWN:
-      throw std::runtime_error("unhandled UNKNOWN");
       break;
     }
   }
   void Assume::execute(MachineState &s) {
     s.assumptions.push_back(s.opstack.back());
-    s.runner->solver->assertFormula(s.opstack.back());
-    if (s.runner->solver->inconsistent()) {
+    s.apply_assumptions();
+    if (boolector_sat(s.runner->btor) == BOOLECTOR_UNSAT) {
       throw assumptions_failed();
     }
   }
@@ -195,23 +184,28 @@ namespace Instructions {
 static std::unordered_set<std::string> builtins =
   { "assert", "assume", "symbolic", "check" };
 
-Status Runner::checkStatus(CVC3::Expr e)
+void MachineState::apply_assumptions() {
+  std::for_each(assumptions.begin(), assumptions.end(),
+		[this](BtorNode* e){boolector_assume(runner->btor, e);});
+}
+
+Status MachineState::checkStatus(BtorNode* e)
 {
-  CVC3::QueryResult pos = solver->checkUnsat(e);
-  if (pos != CVC3::VALID) {
-    solver->returnFromCheck();
-  }
-  CVC3::QueryResult neg = solver->checkUnsat(e.negate());
-  if (neg != CVC3::VALID) {
-    solver->returnFromCheck();
-  }
-  if (pos == CVC3::SATISFIABLE && neg == CVC3::SATISFIABLE) {
+  apply_assumptions();
+  boolector_assume(runner->btor, e);
+  int pos = boolector_sat(runner->btor);
+  apply_assumptions();
+  BtorNode *not_e = boolector_not(runner->btor, e);
+  boolector_assume(runner->btor, not_e);
+  boolector_release(runner->btor, not_e);
+  int neg = boolector_sat(runner->btor);
+  if (pos == BOOLECTOR_SAT && neg == BOOLECTOR_SAT) {
     return TRUE_OR_FALSE;
-  } else if (pos == CVC3::SATISFIABLE && neg == CVC3::UNSATISFIABLE) {
+  } else if (pos == BOOLECTOR_SAT && neg == BOOLECTOR_UNSAT) {
     return MUST_BE_TRUE;
-  } else if (pos == CVC3::UNSATISFIABLE && neg == CVC3::SATISFIABLE) {
+  } else if (pos == BOOLECTOR_UNSAT && neg == BOOLECTOR_SAT) {
     return MUST_BE_FALSE;
-  } else if (pos == CVC3::UNSATISFIABLE && neg == CVC3::UNSATISFIABLE) {
+  } else if (pos == BOOLECTOR_UNSAT && neg == BOOLECTOR_UNSAT) {
     return NOT_TRUE_NOR_FALSE;
   } else {
     return UNKNOWN;
@@ -363,7 +357,6 @@ void Runner::compile(Program *p)
 
 MachineState &Runner::fork(MachineState &s)
 {
-  std::cout << "forking, now " << active_states.size() << " active states\n";
   active_states.emplace_back(s);
   return active_states.back();
 }
@@ -395,9 +388,6 @@ void Runner::runStates()
   int completed = 0;
   while (active_states.size()) {
     MachineState &s = active_states.front();
-    solver->push();
-    std::for_each(s.assumptions.begin(), s.assumptions.end(),
-		  [this](CVC3::Expr e){solver->assertFormula(e);});
     while (s.code.size()) {
       Instruction *i = s.code.front();
       s.code.pop_front();
@@ -407,7 +397,6 @@ void Runner::runStates()
 	break;
       }
     }
-    solver->pop();
     active_states.pop_front();
     ++completed;
     std::cout << "Completed " << completed << " states, " << active_states.size() << " remain\n";

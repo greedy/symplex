@@ -3,28 +3,41 @@
 
 #include "ast.hpp"
 
-#include <cvc3/vc.h>
+extern "C" {
+#include <boolector.h>
+}
 
 #include <list>
 #include <vector>
 #include <unordered_set>
 #include <unordered_map>
 #include <iostream>
+#include <algorithm>
 
 class State;
 class Runner;
 
 struct Instruction;
 
+enum Status {
+  MUST_BE_TRUE,
+  MUST_BE_FALSE,
+  TRUE_OR_FALSE,
+  NOT_TRUE_NOR_FALSE,
+  UNKNOWN
+};
+
 struct MachineState {
   Runner *runner;
-  typedef std::unordered_map<std::string, CVC3::Expr> environment;
-  std::vector<CVC3::Expr> opstack;
+  Status checkStatus(BtorNode *e);
+  typedef std::unordered_map<std::string, BtorNode*> environment;
+  std::vector<BtorNode*> opstack;
   std::vector<environment> envstack;
   std::vector<std::string> trace;
   environment &env() { return envstack.back(); }
   std::list<Instruction*> code;
-  std::vector<CVC3::Expr> assumptions;
+  std::vector<BtorNode*> assumptions;
+  void apply_assumptions();
 };
 
 struct CompiledFunction {
@@ -126,52 +139,19 @@ namespace Instructions {
   };
 }
 
-struct Activation {
-  std::unordered_map<std::string, CVC3::Expr> env;
-  State *owner;
-  std::string name;
-
-  Activation(State *owner_, std::string name_) : owner(owner_), name(name_) {}
-};
-
-struct State {
-  Runner *owner;
-  std::vector<Activation> callstack;
-  CVC3::Expr evaluate(std::vector<Expr*> *e) { return evaluate(*e); }
-  CVC3::Expr evaluate(std::vector<Expr*> &e);
-  CVC3::Expr evaluate(Expr *e);
-  CVC3::Expr fun_symbolic();
-  CVC3::Expr fun_assume(CVC3::Expr e);
-  CVC3::Expr fun_assert(CVC3::Expr e);
-  CVC3::Expr fun_check(CVC3::Expr e);
-  Activation &curframe() { return callstack.back(); }
-
-  State(Runner *owner_)
-    : owner(owner_)
-  {
-    callstack.emplace_back(this, "entry");
-  }
-};
-
-enum Status {
-  MUST_BE_TRUE,
-  MUST_BE_FALSE,
-  TRUE_OR_FALSE,
-  NOT_TRUE_NOR_FALSE,
-  UNKNOWN
-};
-
 struct Runner {
   std::unordered_map<std::string, CompiledFunction*> compfunc_byname;
   std::vector<CompiledSuite> suites;
-  CVC3::ValidityChecker *solver;
-  Status checkStatus(CVC3::Expr e);
+  Btor *btor;
 
   std::list<MachineState> active_states;
 
   MachineState& fork(MachineState &s);
 
-  Runner(Program *p) : solver(CVC3::ValidityChecker::create()) {
+  Runner(Program *p) {
+    btor = boolector_new();
+    boolector_enable_model_gen(btor);
+    boolector_enable_inc_usage(btor);
     compile(p);
   };
 
