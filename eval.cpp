@@ -399,6 +399,6 @@ void Runner::runStates()
     }
     active_states.pop_front();
     ++completed;
-    std::cout << "Completed " << completed << " states, " << active_states.size() << " remain\n";
+    std::cout << "   Completed " << completed << " states, " << active_states.size() << " remain\n";
   }
 }
