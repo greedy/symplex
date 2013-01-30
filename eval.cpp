@@ -1,8 +1,12 @@
 #include "eval.hpp"
 
 #include <stdexcept>
+#include <algorithm>
+#include <iterator>
 
 #define BV_WIDTH 8
+
+struct assumptions_failed {};
 
 template <typename C>
 typename C::value_type pop(C &c) {
@@ -11,8 +15,8 @@ typename C::value_type pop(C &c) {
   return result;
 }
 
-template <typename C, typename T>
-void push(C &c, T &v) {
+template <typename C>
+void push(C &c, typename C::value_type v) {
   c.push_back(v);
 }
 
@@ -22,7 +26,9 @@ void splice(T &to, F &from) {
 }
 
 namespace Instructions {
-  void Store::execute(MachineState &s) { s.env()[dest] = s.opstack.back(); }
+  void Store::execute(MachineState &s) {
+    s.env()[dest] = s.opstack.back();
+  }
   void IfThenElse::execute(MachineState &s) {
     CVC3::Expr cond = pop(s.opstack);
     Status stat = s.runner->checkStatus(cond);
@@ -39,6 +45,7 @@ namespace Instructions {
 	false_branch.assumptions.push_back(cond.negate());
 	splice(false_branch.code, iffalse);
 	s.assumptions.push_back(cond);
+	s.runner->solver->assertFormula(cond);
 	splice(s.code, iftrue);
       }
       break;
@@ -51,17 +58,137 @@ namespace Instructions {
     }
   }
   void Call::execute(MachineState &s) {
+    std::cout << "Calling " << target << " " << s.envstack.size() << "\n";
     CompiledFunction *target_fun = s.runner->compfunc_byname.at(target);
-    MachineState::environment callenv;
+    s.envstack.emplace_back();
     for (auto it = target_fun->params.rbegin(), ie = target_fun->params.rend();
 	 it != ie; ++it) {
-      callenv[*it] = pop(s.opstack);
+      s.env()[*it] = pop(s.opstack);
     }
-    s.envstack.push_back(std::move(callenv));
+    s.trace.push_back(target_fun->name);
     splice(s.code, target_fun->code);
   }
   void Return::execute(MachineState &s) {
+    std::cout << "Returning " << s.envstack.size() << "\n";
     s.envstack.pop_back();
+    s.trace.pop_back();
+  }
+  void Add::execute(MachineState &s) {
+    CVC3::Expr y = pop(s.opstack);
+    CVC3::Expr x = pop(s.opstack);
+    push(s.opstack, s.runner->solver->newBVPlusExpr(BV_WIDTH, x, y));
+  }
+  void Sub::execute(MachineState &s) {
+    CVC3::Expr y = pop(s.opstack);
+    CVC3::Expr x = pop(s.opstack);
+    push(s.opstack, s.runner->solver->newBVSubExpr(x, y));
+  }
+  void Mult::execute(MachineState &s) {
+    CVC3::Expr y = pop(s.opstack);
+    CVC3::Expr x = pop(s.opstack);
+    push(s.opstack, s.runner->solver->newBVMultExpr(BV_WIDTH, x, y));
+  }
+  void Div::execute(MachineState &s) {
+    CVC3::Expr y = pop(s.opstack);
+    CVC3::Expr x = pop(s.opstack);
+    push(s.opstack, s.runner->solver->newBVSDivExpr(x, y));
+  }
+  void Mod::execute(MachineState &s) {
+    CVC3::Expr y = pop(s.opstack);
+    CVC3::Expr x = pop(s.opstack);
+    push(s.opstack, s.runner->solver->newBVSModExpr(x, y));
+  }
+  void Eq::execute(MachineState &s) {
+    CVC3::Expr y = pop(s.opstack);
+    CVC3::Expr x = pop(s.opstack);
+    push(s.opstack, s.runner->solver->eqExpr(x, y));
+  }
+  void Lt::execute(MachineState &s) {
+    CVC3::Expr y = pop(s.opstack);
+    CVC3::Expr x = pop(s.opstack);
+    push(s.opstack, s.runner->solver->newBVSLTExpr(x, y));
+  }
+  void Gt::execute(MachineState &s) {
+    CVC3::Expr y = pop(s.opstack);
+    CVC3::Expr x = pop(s.opstack);
+    push(s.opstack, s.runner->solver->newBVSLTExpr(y, x));
+  }
+  void Le::execute(MachineState &s) {
+    CVC3::Expr y = pop(s.opstack);
+    CVC3::Expr x = pop(s.opstack);
+    push(s.opstack, s.runner->solver->newBVSLEExpr(x, y));
+  }
+  void Ge::execute(MachineState &s) {
+    CVC3::Expr y = pop(s.opstack);
+    CVC3::Expr x = pop(s.opstack);
+    push(s.opstack, s.runner->solver->newBVSLEExpr(y, x));
+  }
+  void Ne::execute(MachineState &s) {
+    CVC3::Expr y = pop(s.opstack);
+    CVC3::Expr x = pop(s.opstack);
+    push(s.opstack, s.runner->solver->eqExpr(x, y).negate());
+  }
+  void LoadConst::execute(MachineState &s) {
+    push(s.opstack, s.runner->solver->newBVConstExpr(CVC3::Rational(value), BV_WIDTH));
+  }
+  void LoadVar::execute(MachineState &s) {
+    push(s.opstack, s.env().at(name));
+  }
+  void Pop::execute(MachineState &s) {
+    pop(s.opstack);
+  }
+  void LoadSymbolic::execute(MachineState &s) {
+    static int id = 0;
+    push(s.opstack, s.runner->solver->varExpr("var_" + std::to_string(++id), s.runner->solver->bitvecType(BV_WIDTH)));
+  }
+  void Check::execute(MachineState &s) {
+    CVC3::Expr &e = s.opstack.back();
+    CVC3::QueryResult stat = s.runner->solver->query(e);
+    std::vector<std::string> reasons;
+    if (s.runner->solver->incomplete(reasons)) {
+      std::cout << "Incomplete results, reasons follow.\n";
+      for (auto it = reasons.begin(), ie = reasons.end();
+	   it != ie; ++it)
+	{
+	  std::cout << *it << "\n";
+	}
+    }
+    switch (stat) {
+    case CVC3::VALID:
+      break;
+    case CVC3::INVALID:
+      {
+	CVC3::ExprMap<CVC3::Expr> ce;
+	s.runner->solver->getConcreteModel(ce);
+	std::cout << "Assertion can fail!\nHere's how:\n";
+	auto tt = s.trace.rbegin();
+	for (auto it = s.envstack.rbegin(), ie = s.envstack.rend();
+	     it != ie; ++it, ++tt)
+	  {
+	    std::cout << "In " << *tt << ":\n";
+	    for (auto vit = it->begin(), vie = it->end();
+		 vit != vie; ++vit)
+	      {
+		std::cout << "  " << vit->first << " = " << s.runner->solver->getValue(vit->second) << "\n";
+	      }
+	  }
+	s.runner->solver->returnFromCheck();
+      }
+      break;
+    case CVC3::ABORT:
+      throw std::runtime_error("unhandled ABORT");
+      break;
+    case CVC3::UNKNOWN:
+      throw std::runtime_error("unhandled UNKNOWN");
+      break;
+    }
+  }
+  void Assume::execute(MachineState &s) {
+    s.assumptions.push_back(s.opstack.back());
+    s.runner->solver->assertFormula(s.opstack.back());
+    if (s.runner->solver->inconsistent()) {
+      throw assumptions_failed();
+    }
   }
 }
 
@@ -91,269 +218,198 @@ Status Runner::checkStatus(CVC3::Expr e)
   }
 }
 
-CVC3::Expr State::evaluate(std::vector<Expr*> &exprs)
+void Runner::compileBody(std::vector<Expr*> &body, std::vector<Instruction*> &code)
 {
-  CVC3::Expr ans;
-  for (auto it = exprs.begin(), ie = exprs.end();
+  for (auto it = body.begin(), ie = body.end();
        it != ie; ++it)
     {
-      ans = evaluate(*it);
-    }
-  return ans;
-}
-
-CVC3::Expr State::fun_symbolic()
-{
-  static int id = 0;
-  return owner->solver->varExpr("var_" + std::to_string(++id), owner->solver->bitvecType(BV_WIDTH));
-}
-
-CVC3::Expr State::fun_assume(CVC3::Expr e)
-{
-  owner->solver->assertFormula(e);
-  return e;
-}
-
-CVC3::Expr State::fun_assert(CVC3::Expr e)
-{
-  fun_check(e);
-  fun_assume(e);
-  return e;
-}
-
-CVC3::Expr State::fun_check(CVC3::Expr e)
-{
-  CVC3::QueryResult stat = owner->solver->query(e);
-  std::vector<std::string> reasons;
-  if (owner->solver->incomplete(reasons)) {
-    std::cout << "Incomplete results, reasons follow.\n";
-    for (auto it = reasons.begin(), ie = reasons.end();
-         it != ie; ++it)
-      {
-        std::cout << *it << "\n";
+      compileExpr(*it, code);
+      if (it != ie - 1) {
+	code.push_back(new Instructions::Pop());
       }
-  }
-  switch (stat) {
-  case CVC3::VALID:
-    break;
-  case CVC3::INVALID:
-    {
-      CVC3::ExprMap<CVC3::Expr> ce;
-      owner->solver->getConcreteModel(ce);
-      std::cout << "Assertion can fail!\nHere's how:\n";
-      for (auto it = callstack.rbegin(), ie = callstack.rend();
-           it != ie; ++it)
-        {
-          std::cout << "In " << it->name << ":\n";
-          for (auto vit = it->env.begin(), vie = it->env.end();
-               vit != vie; ++vit)
-            {
-              std::cout << "  " << vit->first << " = " << owner->solver->getValue(vit->second) << "\n";
-            }
-        }
     }
-    break;
-  case CVC3::ABORT:
-    throw std::runtime_error("unhandled ABORT");
-    break;
-  case CVC3::UNKNOWN:
-    throw std::runtime_error("unhandled UNKNOWN");
-    break;
-  }
-  return e;
 }
 
-CVC3::Expr State::evaluate(Expr *e)
+void Runner::compileExpr(Expr *e, std::vector<Instruction*> &code)
 {
-  if (AssignExpr *ae = dynamic_cast<AssignExpr*>(e)) {
-    CVC3::Expr result = evaluate(ae->expr);
-    curframe().env[*ae->name] = result;
-    return result;
+  if (AssignExpr* ae = dynamic_cast<AssignExpr*>(e)) {
+    compileExpr(ae->expr, code);
+    code.push_back(new Instructions::Store(*ae->name));
   }
-  else if (IfThenElseExpr *ite = dynamic_cast<IfThenElseExpr*>(e)) {
-    CVC3::Expr cond_result = evaluate(ite->cond);
-    Status result = owner->checkStatus(cond_result);
-    switch (result) {
-    case MUST_BE_TRUE:
-      return evaluate(*ite->iftrue);
-    case MUST_BE_FALSE:
-      return evaluate(*ite->iffalse);
-    case TRUE_OR_FALSE:
-      {
-        State truebranch(*this), falsebranch(*this);
-        owner->solver->push();
-        owner->solver->assertFormula(cond_result);
-        CVC3::Expr true_ans = truebranch.evaluate(ite->iftrue);
-        owner->solver->pop();
-        owner->solver->push();
-        owner->solver->assertFormula(cond_result.negate());
-        CVC3::Expr false_ans = falsebranch.evaluate(ite->iffalse);
-        owner->solver->pop();
-        /* now merge the environments */
-        curframe().env.clear();
-        std::unordered_map<std::string, CVC3::Expr> &true_env = truebranch.curframe().env;
-        std::unordered_map<std::string, CVC3::Expr> &false_env = falsebranch.curframe().env;
-        for (auto it = true_env.begin(), ie = true_env.end();
-             it != ie; ++it)
-          {
-            if (false_env.count(it->first)) {
-              curframe().env[it->first] = owner->solver->iteExpr(cond_result,
-                                                      it->second,
-                                                      false_env.at(it->first));
-            }
-          }
-        return owner->solver->iteExpr(cond_result, true_ans, false_ans);
-      }
-    case NOT_TRUE_NOR_FALSE:
-      /* the state is invalid */
-      throw std::runtime_error("Invalid state reached!");
-    case UNKNOWN:
-      throw std::runtime_error("Condition is unknown!");
-    }
+  else if (IfThenElseExpr *itee = dynamic_cast<IfThenElseExpr*>(e)) {
+    std::vector<Instruction*> iftrue, iffalse;
+    compileBody(*itee->iftrue, iftrue);
+    compileBody(*itee->iffalse, iffalse);
+    compileExpr(itee->cond, code);
+    code.push_back(new Instructions::IfThenElse(iftrue, iffalse));
   }
   else if (CallExpr *ce = dynamic_cast<CallExpr*>(e)) {
-    std::string &target_name = *ce->target;
-    if (target_name == "symbolic") {
-      return fun_symbolic();
-    }
-    else if (target_name == "assume") {
-      if (ce->args->size() != 1) {
-        throw std::runtime_error("Wrong number of arguments to builtin function assume, expected 1 got " + std::to_string(ce->args->size()));
-      }
-      return fun_assume(evaluate(ce->args->at(0)));
-    }
-    else if (target_name == "assert") {
-      if (ce->args->size() != 1) {
-        throw std::runtime_error("Wrong number of arguments to builtin function assume, expected 1 got " + std::to_string(ce->args->size()));
-      }
-      return fun_assert(evaluate(ce->args->at(0)));
-    }
-    else if (target_name == "check") {
-      if (ce->args->size() != 1) {
-        throw std::runtime_error("Wrong number of arguments to builtin function assume, expected 1 got " + std::to_string(ce->args->size()));
-      }
-      return fun_check(evaluate(ce->args->at(0)));
-    }
-    Function *fun = owner->func_byname[*ce->target];
-    if (fun == NULL) {
-      throw std::runtime_error("Undefined function " + *ce->target);
-    }
-    if (fun->params->size() != ce->args->size()) {
-      throw std::runtime_error("Wrong number of arguments to " + *fun->name + ", expected " + std::to_string(fun->params->size()) + " got " + std::to_string(ce->args->size()));
-    }
-    std::vector<CVC3::Expr> arg_vals;
-    arg_vals.reserve(ce->args->size());
     for (auto it = ce->args->begin(), ie = ce->args->end();
-         it != ie; ++it)
+	 it != ie; ++it)
       {
-        arg_vals.push_back(evaluate(*it));
+	compileExpr(*it, code);
       }
-    Activation act(this, target_name);
-    auto ai = arg_vals.begin();
-    for (auto pi = fun->params->begin(), pe = fun->params->end();
-         pi != pe; ++pi, ++ai)
-      {
-        act.env[**pi] = *ai;
+    if (*ce->target == "symbolic") {
+      if (ce->args->size() != 0) {
+	throw std::runtime_error("wrong number of arguments to builtin 'symbolic'");
       }
-    callstack.push_back(act);
-    CVC3::Expr result = evaluate(fun->body);
-    callstack.pop_back();
-    return result;
+      code.push_back(new Instructions::LoadSymbolic());
+    } else if (*ce->target == "check") {
+      if (ce->args->size() != 1) {
+	throw std::runtime_error("wrong number of arguments to builtin 'check'");
+      }
+      code.push_back(new Instructions::Check());
+    } else if (*ce->target == "assert") {
+      if (ce->args->size() != 1) {
+	throw std::runtime_error("wrong number of arguments to builtin 'assert'");
+      }
+      code.push_back(new Instructions::Check());
+      code.push_back(new Instructions::Assume());
+    } else if (*ce->target == "assume") {
+      if (ce->args->size() != 1) {
+	throw std::runtime_error("wrong number of arguments to builtin 'assume'");
+      }
+      code.push_back(new Instructions::Assume());
+    } else {
+      code.push_back(new Instructions::Call(*ce->target));
+    }
   }
   else if (BasicExpr *be = dynamic_cast<BasicExpr*>(e)) {
-    std::vector<CVC3::Expr> child_vals;
-    child_vals.reserve(be->children->size());
-    for (auto it = be->children->begin(), ie = be->children->end();
-         it != ie; ++it)
-      {
-        child_vals.push_back(evaluate(*it));
-      }
+    std::for_each(be->children->begin(), be->children->end(),
+		  [this,&code](Expr *se) { compileExpr(se, code); });
     switch (be->op) {
     case BasicExpr::Plus:
-      return owner->solver->newBVPlusExpr(BV_WIDTH, child_vals[0], child_vals[1]);
+      code.push_back(new Instructions::Add());
+      break;
     case BasicExpr::Minus:
-      return owner->solver->newBVSubExpr(child_vals[0], child_vals[1]);
+      code.push_back(new Instructions::Sub());
+      break;
     case BasicExpr::Times:
-      return owner->solver->newBVMultExpr(BV_WIDTH, child_vals[0], child_vals[1]);
+      code.push_back(new Instructions::Mult());
+      break;
     case BasicExpr::Divide:
-      return owner->solver->newBVSDivExpr(child_vals[0], child_vals[1]);
+      code.push_back(new Instructions::Div());
+      break;
     case BasicExpr::Mod:
-      return owner->solver->newBVSModExpr(child_vals[0], child_vals[1]);
+      code.push_back(new Instructions::Mod());
+      break;
     case BasicExpr::Eq:
-      return owner->solver->eqExpr(child_vals[0], child_vals[1]);
+      code.push_back(new Instructions::Eq());
+      break;
     case BasicExpr::Lt:
-      return owner->solver->newBVSLTExpr(child_vals[0], child_vals[1]);
+      code.push_back(new Instructions::Lt());
+      break;
     case BasicExpr::Gt:
-      return owner->solver->newBVSLTExpr(child_vals[1], child_vals[0]);
+      code.push_back(new Instructions::Gt());
+      break;
     case BasicExpr::Le:
-      return owner->solver->newBVSLEExpr(child_vals[0], child_vals[1]);
+      code.push_back(new Instructions::Le());
+      break;
     case BasicExpr::Ge:
-      return owner->solver->newBVSLEExpr(child_vals[1], child_vals[0]);
+      code.push_back(new Instructions::Ge());
+      break;
     case BasicExpr::Ne:
-      return owner->solver->eqExpr(child_vals[0], child_vals[1]).negate();
+      code.push_back(new Instructions::Ne());
+      break;
     }
   }
   else if (ConstExpr *ce = dynamic_cast<ConstExpr*>(e)) {
-    return owner->solver->newBVConstExpr(CVC3::Rational(std::stol(*ce->cv)), BV_WIDTH);
+    code.push_back(new Instructions::LoadConst(std::stol(*ce->cv)));
   }
   else if (VarExpr *ve = dynamic_cast<VarExpr*>(e)) {
-    auto it = curframe().env.find(*ve->var);
-    if (it == curframe().env.end()) {
-      throw std::runtime_error("Reference to undefined variable '" + *ve->var + "'");
-    } else {
-      return it->second;
-    }
+    code.push_back(new Instructions::LoadVar(*ve->var));
   }
-  else if (LabeledExpr *le = dynamic_cast<LabeledExpr*>(e)) {
-    return evaluate(le->expr);
+  else if (LabeledExpr *le = dynamic_cast<LabeledExpr*>(le)) {
+    compileExpr(le->expr, code);
   }
   else {
-    throw std::logic_error(std::string("expression type ") + typeid(e).name() + " not handled");
+    throw std::logic_error("unhandled expression during compilation");
   }
-  throw std::logic_error("some case forgot to return");
 }
 
-void Runner::run(Program *p)
+void Runner::compile(Program *p)
 {
   for (auto it = p->functions.begin(), ie = p->functions.end();
        it != ie; ++it)
     {
+      CompiledFunction *cf = new CompiledFunction();
       Function &f = **it;
-      if (builtins.count(*f.name)) {
-        std::cerr << "Cannot replace builtin function " << *f.name << "\n";
-        return;
-      }
-      if (func_byname.count(*f.name)) {
-        std::cerr << "Function " << *f.name << " already defined\n";
-        return;
-      }
-      func_byname.insert(std::make_pair(*f.name, &f));
+      cf->name = *f.name;
+      std::transform(f.params->begin(), f.params->end(), std::back_inserter(cf->params),
+		     [] (std::string *sp) { return *sp; });
+      compfunc_byname[cf->name] = cf;
+      compileBody(*f.body, cf->code);
+      cf->code.push_back(new Instructions::Return());
     }
   for (auto it = p->suites.begin(), ie = p->suites.end();
        it != ie; ++it)
     {
-      Suite &suite = **it;
-      std::cout << "Running suite " << *suite.name << "\n";
-      State setup_state(this);
+      suites.emplace_back();
+      CompiledSuite &cs = suites.back();
+      Suite &s = **it;
+      cs.name = *s.name;
+      compileBody(*s.setup, cs.setup_code);
+      for (auto ti = s.tests->begin(), te = s.tests->end();
+	   ti != te; ++ti)
+	{
+	  cs.tests.emplace_back();
+	  CompiledTest &ct = cs.tests.back();
+	  Test &t = **ti;
+	  ct.name = *t.name;
+	  compileBody(*t.body, ct.code);
+	}
+    }
+}
+
+MachineState &Runner::fork(MachineState &s)
+{
+  std::cout << "forking, now " << active_states.size() << " active states\n";
+  active_states.emplace_back(s);
+  return active_states.back();
+}
+
+void Runner::runSuites()
+{
+  for (auto it = suites.begin(), ie = suites.end();
+       it != ie; ++it)
+    {
+      std::cout << "Running suite " << it->name << "\n";
+      for (auto tt = it->tests.begin(), te = it->tests.end();
+	   tt != te; ++tt)
+	{
+	  std::cout << " Running test " << tt->name << "\n";
+	  active_states.emplace_back();
+	  MachineState &s = active_states.back();
+	  s.runner = this;
+	  s.envstack.emplace_back();
+	  s.trace.emplace_back(it->name + "/" + tt->name);
+	  s.code.insert(s.code.end(), it->setup_code.begin(), it->setup_code.end());
+	  s.code.insert(s.code.end(), tt->code.begin(), tt->code.end());
+	  runStates();
+	}
+    }
+}
+
+void Runner::runStates()
+{
+  int completed = 0;
+  while (active_states.size()) {
+    MachineState &s = active_states.front();
+    solver->push();
+    std::for_each(s.assumptions.begin(), s.assumptions.end(),
+		  [this](CVC3::Expr e){solver->assertFormula(e);});
+    while (s.code.size()) {
+      Instruction *i = s.code.front();
+      s.code.pop_front();
       try {
-        std::cout << " Setting up suite... " << std::flush;
-        setup_state.evaluate(suite.setup);
-        std::cout << "done\n";
-        for (auto it = suite.tests->begin(), ie = suite.tests->end();
-             it != ie; ++it)
-          {
-            Test &test = **it;
-            std::cout << " Running test " << *test.name << "..." << std::flush;
-            State test_state(setup_state);
-            try {
-              test_state.evaluate(test.body);
-            } catch (CVC3::Exception &e) {
-              std::cout << "Exception from CVC3: " << e.toString() << "\n";
-            }
-            std::cout << "passed\n";
-          }
-      } catch (CVC3::Exception &e) {
-        std::cout << "Exception from CVC3: " << e.toString() << "\n";
+	i->execute(s);
+      } catch (assumptions_failed &af) {
+	break;
       }
     }
+    solver->pop();
+    active_states.pop_front();
+    ++completed;
+    std::cout << "Completed " << completed << " states, " << active_states.size() << " remain\n";
+  }
 }
