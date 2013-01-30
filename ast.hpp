@@ -5,7 +5,7 @@
 #include <string>
 
 struct Expr {
-  virtual ~Expr();
+  virtual ~Expr() {};
 };
 struct AssignExpr : Expr {
   AssignExpr(std::string *name_, Expr *expr_) : name(name_), expr(expr_) {};
