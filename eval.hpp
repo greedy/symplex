@@ -76,7 +76,7 @@ struct MachineState {
 
   MachineState(const MachineState &other)
     : runner(other.runner), envstack(other.envstack), trace(other.trace)
-    , code(other.code), assumptions(other.assumptions)
+    , code(other.code), assumptions(other.assumptions), opstack(other.opstack)
   {
     for (auto &e : envstack) {
       for (auto &p : e) {
