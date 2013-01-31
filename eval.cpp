@@ -45,7 +45,13 @@ void splice(std::list<Instruction*> &to, std::vector<std::unique_ptr<Instruction
 
 namespace Instructions {
   void Store::execute(MachineState &s) {
-    s.env()[dest] = s.copy(s.opstack.back());
+    auto cell = s.env().find(dest);
+    if (cell == s.env().end()) {
+      s.env().insert(std::make_pair(dest, s.copy(s.opstack.back())));
+    } else {
+      s.release(cell->second);
+      cell->second = s.copy(s.opstack.back());
+    }
   }
   void IfThenElse::execute(MachineState &s) {
     BtorNode* cond = pop(s.opstack);
