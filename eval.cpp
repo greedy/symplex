@@ -92,8 +92,9 @@ namespace Instructions {
     splice(s.code, target_fun.code);
   }
   void Return::execute(MachineState &s) {
-    std::for_each(s.env().begin(), s.env().end(),
-		  [&s](const std::pair<std::string,BtorNode*> &i){s.release(i.second);});
+    for (auto &cell : s.env()) {
+      s.release(cell.second);
+    }
     s.envstack.pop_back();
     s.trace.pop_back();
   }
