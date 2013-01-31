@@ -86,7 +86,7 @@ namespace Instructions {
     s.envstack.emplace_back();
     for (auto it = target_fun.params.rbegin(), ie = target_fun.params.rend();
 	 it != ie; ++it) {
-      s.env()[*it] = pop(s.opstack);
+      s.env().insert(std::make_pair(*it, pop(s.opstack)));
     }
     s.trace.push_back(target_fun.name);
     splice(s.code, target_fun.code);
