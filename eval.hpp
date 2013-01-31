@@ -112,6 +112,7 @@ struct CompiledSuite {
 struct Instruction {
   virtual ~Instruction() {};
   virtual void execute(MachineState &s) = 0;
+  virtual std::vector<std::string> source() = 0;
 };
 
 namespace Instructions {
@@ -119,73 +120,148 @@ namespace Instructions {
     std::string dest;
     void execute(MachineState &s);
     Store(std::string &dest_) : dest(dest_) {}
+    std::vector<std::string> source() { return std::vector<std::string>({std::string("store ") + dest}); }
   };
   struct IfThenElse : Instruction {
     std::vector<std::unique_ptr<Instruction> > iftrue, iffalse;
     void execute(MachineState &s);
+    std::vector<std::string> source() {
+      std::vector<std::string> res;
+      res.emplace_back("ifthenelse");
+      res.emplace_back(" iftrue:");
+      for (auto &i : iftrue) {
+	for (auto &l : i->source()) {
+	  res.emplace_back("  " + l);
+	}
+      }
+      res.emplace_back(" iffalse:");
+      for (auto &i : iffalse) {
+	for (auto &l : i->source()) {
+	  res.emplace_back("  " + l);
+	}
+      }
+      return res;
+    }
   };
   struct Call : Instruction {
     std::string target;
     void execute(MachineState &s);
     Call(std::string &target_) : target(target_) {}
+    std::vector<std::string> source() {
+      return std::vector<std::string>({"call " + target});
+    }
   };
   struct Return : Instruction {
     void execute(MachineState &s);
+    std::vector<std::string> source() {
+      return std::vector<std::string>({"return"});
+    }
   };
   struct Add : Instruction {
     void execute(MachineState &s);
+    std::vector<std::string> source() {
+      return std::vector<std::string>({"add"});
+    }
   };
   struct Sub : Instruction {
     void execute(MachineState &s);
+    std::vector<std::string> source() {
+      return std::vector<std::string>({"sub"});
+    }
   };
   struct Mult : Instruction {
     void execute(MachineState &s);
+    std::vector<std::string> source() {
+      return std::vector<std::string>({"mult"});
+    }
   };
   struct Div : Instruction {
     void execute(MachineState &s);
+    std::vector<std::string> source() {
+      return std::vector<std::string>({"div"});
+    }
   };
   struct Mod : Instruction {
     void execute(MachineState &s);
+    std::vector<std::string> source() {
+      return std::vector<std::string>({"mod"});
+    }
   };
   struct Eq : Instruction {
     void execute(MachineState &s);
+    std::vector<std::string> source() {
+      return std::vector<std::string>({"eq"});
+    }
   };
   struct Lt : Instruction {
     void execute(MachineState &s);
+    std::vector<std::string> source() {
+      return std::vector<std::string>({"lt"});
+    }
   };
   struct Gt : Instruction {
     void execute(MachineState &s);
+    std::vector<std::string> source() {
+      return std::vector<std::string>({"gt"});
+    }
   };
   struct Le : Instruction {
     void execute(MachineState &s);
+    std::vector<std::string> source() {
+      return std::vector<std::string>({"le"});
+    }
   };
   struct Ge : Instruction {
     void execute(MachineState &s);
+    std::vector<std::string> source() {
+      return std::vector<std::string>({"ge"});
+    }
   };
   struct Ne : Instruction {
     void execute(MachineState &s);
+    std::vector<std::string> source() {
+      return std::vector<std::string>({"ne"});
+    }
   };
   struct LoadConst : Instruction {
     long value;
     void execute(MachineState &s);
     LoadConst(long value_) : value(value_) {}
+    std::vector<std::string> source() {
+      return std::vector<std::string>({"load_const " + std::to_string(value)});
+    }
   };
   struct LoadVar : Instruction {
     std::string name;
     void execute(MachineState &s);
     LoadVar(std::string &name_) : name(name_) {}
+    std::vector<std::string> source() {
+      return std::vector<std::string>({"load_var " + name});
+    }
   };
   struct Pop : Instruction {
     void execute(MachineState &s);
+    std::vector<std::string> source() {
+      return std::vector<std::string>({"pop"});
+    }
   };
   struct LoadSymbolic : Instruction {
     void execute(MachineState &s);
+    std::vector<std::string> source() {
+      return std::vector<std::string>({"load_symbolic"});
+    }
   };
   struct Check : Instruction {
     void execute(MachineState &s);
+    std::vector<std::string> source() {
+      return std::vector<std::string>({"check"});
+    }
   };
   struct Assume : Instruction {
     void execute(MachineState &s);
+    std::vector<std::string> source() {
+      return std::vector<std::string>({"assume"});
+    }
   };
 }
 

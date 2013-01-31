@@ -378,6 +378,12 @@ void Runner::compile(Program *p)
       compfunc_byname.insert(std::make_pair(cf->name, std::unique_ptr<CompiledFunction>(cf)));
       compileBody(*f.body, cf->code);
       cf->code.emplace_back(new Instructions::Return());
+      std::cout << "compiled code for " << cf->name << ":\n";
+      for (auto &i : cf->code) {
+	for (auto &l : i->source()) {
+	  std::cout << l << "\n";
+	}
+      }
     }
   for (auto it = p->suites.begin(), ie = p->suites.end();
        it != ie; ++it)
