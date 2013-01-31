@@ -17,7 +17,16 @@
 #ifndef PARSER_HPP
 #define PARSER_HPP
 
+#include <string>
+
 class Program;
+
+struct TokenData {
+  std::string *lexeme;
+  unsigned line, column;
+  TokenData(std::string *lexeme_, unsigned line_, unsigned column_)
+    : lexeme(lexeme_), line(line_), column(column_) {}
+};
 
 class Parser {
   void scan();
@@ -25,6 +34,8 @@ class Parser {
 
   int cs, act;
   char *p, *pe, *eof, *ts, *te;
+  char *linestart;
+  unsigned curline = 0;
 
   void *lemParser = 0;
 public:

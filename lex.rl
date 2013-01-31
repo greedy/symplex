@@ -56,7 +56,8 @@ main := |*
 
   (alpha | '_') (alnum | '_')* { tok(IDENT); };
 
-  space;
+  space - '\n';
+  '\n' { linestart = te; curline++; };
 *|;
 
 }%%

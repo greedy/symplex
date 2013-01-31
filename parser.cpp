@@ -25,7 +25,7 @@
 namespace SymplexLemon {
   void *Alloc( void* (*)(size_t) );
   void Free(void*, void (*)(void*) );
-  void Feed(void*, int, std::string*, Parser*);
+  void Feed(void*, int, TokenData*, Parser*);
 };
 
 using namespace SymplexLemon;
@@ -48,7 +48,5 @@ void Parser::parse(char *begin, char *end)
 
 void Parser::tok(int t)
 {
-  std::string *tok_string = new std::string(ts, te);
-  //std::cout << "feeding token " << t << " " << *tok_string << "\n";
-  Feed(lemParser, t, tok_string, this);
+  Feed(lemParser, t, new TokenData(new std::string(ts, te), curline, ts-linestart), this);
 }
