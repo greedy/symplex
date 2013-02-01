@@ -6,11 +6,11 @@ BTOR_BASE = boolector-1.5.118-with-sat-solvers
 CPPFLAGS = -I$(BTOR_BASE)/boolector
 
 
-main: main.o grammar.o lex.o parser.o ast.o eval.o $(BTOR_BASE)/boolector/libboolector.a
+symplex: main.o grammar.o lex.o parser.o ast.o eval.o $(BTOR_BASE)/boolector/libboolector.a
 	g++ $(OPTFLAGS) -o $@ $^ $(BTOR_BASE)/boolector/libboolector.a $(BTOR_BASE)/lingeling/liblgl.a $(BTOR_BASE)/minisat/build/release/lib/libminisat.a $(BTOR_BASE)/picosat/libpicosat.a
 
 clean:
-	rm -f *.o *.d main grammar.cpp lex.cpp
+	rm -f *.o *.d symplex grammar.cpp lex.cpp
 
 reallyclean: clean
 	rm -rf $(BTOR_BASE)

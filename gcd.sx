@@ -3,7 +3,7 @@ function gcd(a,b) {
   else { gcd(b, a % b); };
 }
 
-suite small_tests {
+suite spec {
   a = symbolic();
   b = symbolic();
   assume(a > 0);

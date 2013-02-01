@@ -1,3 +1,101 @@
 SYMbolic Programming Language EXperiment
 
-A programming language with a symbolic evaluator.
+SYMPLEX is a programming language with a builtin symbolic executor.
+Symbolic execution is a method for complete analysis of a program.
+Tests are specified in a similar way to property based testing a la
+QuickCheck: some conditions on arguments are assumed and you check
+that the result of the function fulfills certain properties. However,
+as it is a total analysis, if symplex says your test passes, then it
+is proven absolutely rather than a probabilistic statement. As a
+bonus, when a test fails, symplex generates an input that causes the
+test to fail.
+
+Symbolic execution is complete, but does not have to execute your
+program for all possible inputs. Instead each path through the program
+is considered which for many programs is far fewer than the total
+number of input combinations. A decision procedure is used to reason
+about the values in your program. Symplex uses the boolector SMT
+solver for bitvector arithmetic. To keep things simpler, there are
+only two types in symplex: boolean values (the results of comparison
+operators) and eight bit signed integers (everything else).
+
+Symplex includes some example programs:
+
+  gcd.sx
+
+    An implementation of Euclid's GCD algorithm with a test suite that
+    verifies that the result actually divides both arguments and that
+    it is indeed the greatest such number.
+
+  square.sx
+
+    A simple example that shows how symplex can uncover subtle
+    problems. Here it shows that the square of a number is not always
+    larger than the original number due to modular arithmetic.
+
+  backwards.sx
+
+    Symbolic execution is also capable of solving for the inputs of a
+    program that yield a desired output. This example demonstrates
+    this ability by finding two numbers whose sum is twice their difference.
+
+Symbolic execution is used in several bug finding systems (klee is a
+notable example), but symplex is, as far as I know, unique in
+integrating symbolic execution into the language so that symbolic and
+concrete execution are not distinguished.
+
+The special sauce in in symplex is the built-in function 'symbolic()'.
+It returns a fresh symbolic value. In order to prune the search space,
+you can 'assume()' certain conditions to be true. Any states that
+would contradict an assumption are considered invalid and are not
+explored. Finally, during execution you can check the validity of some
+condition using 'check()'.
+
+A symplex program consists of function definitions followed by test
+suites. A function definition looks like
+
+function foo(x, y) {
+  x + y;
+}
+
+The return value of the function is the value of the final expression.
+
+A test suite consists of setup code common to all tests and a series
+of tests. Typically the setup code creates some symbolic values,
+possible constraints them using 'assume()', and calls a function with
+these symbolic values. For example:
+
+suite foo {
+  a = symbolic();
+  b = symbolic();
+  c = foo(a,b);
+  test two_odds_or_evens_add_to_even {
+    assume(a % 2 == b % 2);
+    check(c % 2 == 0);
+  }
+  test odd_and_even_add_to_odd {
+    assume(a % 2 != b % 2);
+    check(c % 2 == 0);
+  }
+}
+
+Symplex includes operators for add, subtract, multiply, divide,
+modulus, and comparisons with the same syntax and precedence as C. 
+Assignment is also and expression and has the value of the right hand
+side of the assignment. Conditional expressions are written as
+
+if (test) {
+  expressions;
+  to;
+  evaluate;
+  if;
+  true;
+} else {
+  expressions;
+  to;
+  evaluate;
+  if;
+  false;
+};
+
+(Note the semicolon at the end)
