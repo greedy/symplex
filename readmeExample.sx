@@ -1,0 +1,16 @@
+function foo(x, y) {
+  x + y;
+}
+suite foo {
+  a = symbolic();
+  b = symbolic();
+  c = foo(a,b);
+  test two_odds_or_evens_add_to_even {
+    assume(a % 2 == b % 2);
+    check(c % 2 == 0);
+  }
+  test odd_and_even_add_to_odd {
+    assume(a % 2 != b % 2);
+    check(c % 2 == 1);
+  }
+}

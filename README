@@ -39,6 +39,10 @@ Symplex includes some example programs:
     program that yield a desired output. This example demonstrates
     this ability by finding two numbers whose sum is twice their difference.
 
+  readmeExample.sx
+
+    The example given further down in this file.
+
 Symbolic execution is used in several bug finding systems (klee is a
 notable example), but symplex is, as far as I know, unique in
 integrating symbolic execution into the language so that symbolic and
@@ -75,7 +79,7 @@ suite foo {
   }
   test odd_and_even_add_to_odd {
     assume(a % 2 != b % 2);
-    check(c % 2 == 0);
+    check(c % 2 == 1);
   }
 }
 
