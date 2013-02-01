@@ -1,6 +1,6 @@
 *.o
 *.d
-/main
+/symplex
 *~
 /grammar.cpp
 /grammar.h
